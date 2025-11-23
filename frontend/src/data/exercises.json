@@ -1,0 +1,217 @@
+[
+  {
+    "id": "exercise_001",
+    "name": "Barbell Bench Press",
+    "primary_muscle": "Chest",
+    "secondary_muscles": ["Shoulders", "Triceps"],
+    "equipment": ["Barbell", "Bench"],
+    "movement_pattern": "Horizontal Push",
+    "difficulty": "Intermediate",
+    "is_compound": true,
+    "muscle_group": "Upper Body"
+  },
+
+  {
+    "id": "exercise_002",
+    "name": "Chest Press Machine",
+    "primary_muscle": "Chest",
+    "secondary_muscles": ["Shoulders", "Triceps"],
+    "equipment": ["Machine"],
+    "movement_pattern": "Horizontal Push",
+    "difficulty": "Beginner",
+    "is_compound": true,
+    "muscle_group": "Upper Body"
+  },
+
+  {
+    "id": "exercise_003",
+    "name": "Butterfly Machine",
+    "primary_muscle": "Chest",
+    "secondary_muscles": ["Shoulders"],
+    "equipment": ["Machine"],
+    "movement_pattern": "Horizontal Push",
+    "difficulty": "Beginner",
+    "is_compound": false,
+    "muscle_group": "Upper Body"
+  },
+
+  {
+    "id": "exercise_004",
+    "name": "Lateral Raises",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": ["Lateral Delts"],
+    "equipment": ["Dumbbell"],
+    "movement_pattern": "Lateral Raise",
+    "difficulty": "Beginner",
+    "is_compound": false,
+    "muscle_group": "Upper Body"
+  },
+
+  {
+    "id": "exercise_005",
+    "name": "Dumbbell Shoulder Press",
+    "primary_muscle": "Shoulders",
+    "secondary_muscles": ["Triceps"],
+    "equipment": ["Dumbbell"],
+    "movement_pattern": "Vertical Push",
+    "difficulty": "Intermediate",
+    "is_compound": true,
+    "muscle_group": "Upper Body"
+  },
+
+  {
+    "id": "exercise_006",
+    "name": "Cable Triceps Pushdown",
+    "primary_muscle": "Triceps",
+    "secondary_muscles": [],
+    "equipment": ["Cable"],
+    "movement_pattern": "Vertical Push",
+    "difficulty": "Beginner",
+    "is_compound": false,
+    "muscle_group": "Upper Body"
+  },
+
+  {
+    "id": "exercise_007",
+    "name": "Seated Triceps Dip Machine",
+    "primary_muscle": "Triceps",
+    "secondary_muscles": ["Chest"],
+    "equipment": ["Machine"],
+    "movement_pattern": "Vertical Push",
+    "difficulty": "Beginner",
+    "is_compound": true,
+    "muscle_group": "Upper Body"
+  },
+
+  {
+    "id": "exercise_008",
+    "name": "Wide Grip Lat Pulldown",
+    "primary_muscle": "Back",
+    "secondary_muscles": ["Lats", "Biceps"],
+    "equipment": ["Cable"],
+    "movement_pattern": "Vertical Pull",
+    "difficulty": "Beginner",
+    "is_compound": true,
+    "muscle_group": "Upper Body"
+  },
+
+  {
+    "id": "exercise_009",
+    "name": "Bicep Curl Machine",
+    "primary_muscle": "Biceps",
+    "secondary_muscles": [],
+    "equipment": ["Machine"],
+    "movement_pattern": "Vertical Pull",
+    "difficulty": "Beginner",
+    "is_compound": false,
+    "muscle_group": "Upper Body"
+  },
+
+  {
+    "id": "exercise_010",
+    "name": "Seated Row Machine",
+    "primary_muscle": "Back",
+    "secondary_muscles": ["Lats", "Biceps"],
+    "equipment": ["Machine"],
+    "movement_pattern": "Horizontal Pull",
+    "difficulty": "Beginner",
+    "is_compound": true,
+    "muscle_group": "Upper Body"
+  },
+
+  {
+    "id": "exercise_011",
+    "name": "Alternating Dumbbell Hammer Curls",
+    "primary_muscle": "Biceps",
+    "secondary_muscles": ["Forearms"],
+    "equipment": ["Dumbbell"],
+    "movement_pattern": "Vertical Pull",
+    "difficulty": "Beginner",
+    "is_compound": false,
+    "muscle_group": "Upper Body"
+  },
+
+  {
+    "id": "exercise_012",
+    "name": "EZ Bar Curls",
+    "primary_muscle": "Biceps",
+    "secondary_muscles": ["Forearms"],
+    "equipment": ["Barbell"],
+    "movement_pattern": "Vertical Pull",
+    "difficulty": "Beginner",
+    "is_compound": false,
+    "muscle_group": "Upper Body"
+  },
+
+  {
+    "id": "exercise_013",
+    "name": "Hyperextensions",
+    "primary_muscle": "Lower Back",
+    "secondary_muscles": ["Glutes", "Hamstrings"],
+    "equipment": ["Bench"],
+    "movement_pattern": "Horizontal Extension",
+    "difficulty": "Intermediate",
+    "is_compound": true,
+    "muscle_group": "Core"
+  },
+
+  {
+    "id": "exercise_014",
+    "name": "Leg Press",
+    "primary_muscle": "Quads",
+    "secondary_muscles": ["Glutes", "Hamstrings"],
+    "equipment": ["Machine"],
+    "movement_pattern": "Vertical Push",
+    "difficulty": "Beginner",
+    "is_compound": true,
+    "muscle_group": "Lower Body"
+  },
+
+  {
+    "id": "exercise_015",
+    "name": "Leg Extensions",
+    "primary_muscle": "Quads",
+    "secondary_muscles": [],
+    "equipment": ["Machine"],
+    "movement_pattern": "Knee Extension",
+    "difficulty": "Beginner",
+    "is_compound": false,
+    "muscle_group": "Lower Body"
+  },
+
+  {
+    "id": "exercise_016",
+    "name": "Seated Leg Curl",
+    "primary_muscle": "Hamstrings",
+    "secondary_muscles": [],
+    "equipment": ["Machine"],
+    "movement_pattern": "Knee Flexion",
+    "difficulty": "Beginner",
+    "is_compound": false,
+    "muscle_group": "Lower Body"
+  },
+
+  {
+    "id": "exercise_017",
+    "name": "Thigh Adductor",
+    "primary_muscle": "Adductors",
+    "secondary_muscles": [],
+    "equipment": ["Machine"],
+    "movement_pattern": "Horizontal Adduction",
+    "difficulty": "Beginner",
+    "is_compound": false,
+    "muscle_group": "Lower Body"
+  },
+
+  {
+    "id": "exercise_018",
+    "name": "Thigh Abductor",
+    "primary_muscle": "Abductors",
+    "secondary_muscles": [],
+    "equipment": ["Machine"],
+    "movement_pattern": "Horizontal Abduction",
+    "difficulty": "Beginner",
+    "is_compound": false,
+    "muscle_group": "Lower Body"
+  }
+]

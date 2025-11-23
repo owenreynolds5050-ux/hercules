@@ -29,7 +29,8 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({ onDayLongPress
     for (let index = 0; index < gridItems.length; index += 7) {
       rows.push(gridItems.slice(index, index + 7));
     }
-    return rows;
+
+    return rows.filter((week) => week.some((item) => item.isCurrentMonth));
   }, [gridItems]);
 
   const prevScale = useSharedValue(1);
@@ -105,16 +106,20 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({ onDayLongPress
           >
             {week.map((item) => (
               <View key={item.isoDate} style={styles.gridCell}>
-                <CalendarDayCell
-                  isoDate={item.isoDate}
-                  dayLabel={item.dayLabel}
-                  isCurrentMonth={item.isCurrentMonth}
-                  isToday={item.isToday}
-                  isSelected={item.isSelected}
-                  hasMarker={item.hasMarker}
-                  onSelect={selectDate}
-                  onLongPress={onDayLongPress}
-                />
+                {item.isCurrentMonth ? (
+                  <CalendarDayCell
+                    isoDate={item.isoDate}
+                    dayLabel={item.dayLabel}
+                    isCurrentMonth
+                    isToday={item.isToday}
+                    isSelected={item.isSelected}
+                    hasMarker={item.hasMarker}
+                    onSelect={selectDate}
+                    onLongPress={onDayLongPress}
+                  />
+                ) : (
+                  <View pointerEvents="none" style={styles.hiddenPlaceholder} />
+                )}
               </View>
             ))}
           </View>
@@ -150,4 +155,5 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   gridCell: { flex: 1, maxWidth: 56, alignItems: 'center' },
+  hiddenPlaceholder: { width: '100%', aspectRatio: 1 },
 });

@@ -4,11 +4,12 @@
  * Includes spring animations, haptic feedback, and polished styling
  */
 
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   TouchableOpacity,
   Text as RNText,
   StyleSheet,
+  StyleProp,
   ViewStyle,
   TextStyle,
   View,
@@ -69,7 +70,7 @@ const interpolateHexColor = (start: string, end: string, ratio: number): string 
 // ============================================================================
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'light';
-type ButtonSize = 'sm' | 'md' | 'lg';
+type ButtonSize = 'sm' | 'md' | 'lg' | 'xl';
 
 interface ButtonProps {
   /** Button label text */
@@ -83,9 +84,13 @@ interface ButtonProps {
   /** Whether button is disabled */
   disabled?: boolean;
   /** Custom style override */
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
+  /** Optional override for inner button styling */
+  contentStyle?: StyleProp<ViewStyle>;
   /** Whether to show loading state */
   loading?: boolean;
+  /** Optional override for text color */
+  textColor?: string;
 }
 
 // ============================================================================
@@ -99,7 +104,9 @@ export const Button: React.FC<ButtonProps> = ({
   size = 'md',
   disabled = false,
   style,
+  contentStyle,
   loading = false,
+  textColor,
 }) => {
   const scale = useSharedValue(1);
 
@@ -109,7 +116,7 @@ export const Button: React.FC<ButtonProps> = ({
   }));
 
   // Handle press with animation and haptics
-  const handlePress = () => {
+  const handlePress = useCallback(() => {
     if (disabled || loading) return;
 
     // Haptic feedback
@@ -119,17 +126,17 @@ export const Button: React.FC<ButtonProps> = ({
     setTimeout(() => {
       onPress();
     }, buttonPressAnimation.duration);
-  };
+  }, [disabled, loading, onPress]);
 
-  const handlePressIn = () => {
+  const handlePressIn = useCallback(() => {
     if (disabled || loading) return;
     scale.value = withSpring(0.92, springBouncy);
-  };
+  }, [disabled, loading, scale]);
 
-  const handlePressOut = () => {
+  const handlePressOut = useCallback(() => {
     if (disabled || loading) return;
     scale.value = withSpring(1, springBouncy);
-  };
+  }, [disabled, loading, scale]);
 
   const textVariantStyle = {
     primary: styles.primaryText,
@@ -144,11 +151,12 @@ export const Button: React.FC<ButtonProps> = ({
     variant !== 'light' && textVariantStyle,
   ].filter(Boolean) as TextStyle[];
 
-  const baseButtonStyle = [
-    styles.buttonBase,
-    sizeStyles[size],
-    disabled && styles.disabled,
-  ];
+  if (textColor) {
+    textStyle.push({ color: textColor });
+  }
+
+  const baseButtonStyle = [styles.buttonBase, sizeStyles[size]];
+  const disabledStyle = disabled ? styles.disabled : undefined;
 
   let content: React.ReactNode;
 
@@ -158,7 +166,7 @@ export const Button: React.FC<ButtonProps> = ({
         colors={[colors.accent.gradientStart, colors.accent.gradientEnd]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={[...baseButtonStyle, styles.primaryButton]}
+        style={[...baseButtonStyle, styles.primaryButton, contentStyle as ViewStyle, disabledStyle]}
       >
         <RNText style={textStyle}>{loading ? '...' : label}</RNText>
       </LinearGradient>
@@ -217,7 +225,9 @@ export const Button: React.FC<ButtonProps> = ({
     };
 
     content = (
-      <Animated.View style={[...baseButtonStyle, variantStyle, variantShadow]}>
+      <Animated.View
+        style={[...baseButtonStyle, variantStyle, variantShadow, contentStyle, disabledStyle]}
+      >
         {renderLabel()}
       </Animated.View>
     );
@@ -252,12 +262,17 @@ const sizeStyles: Record<ButtonSize, ViewStyle> = {
     height: sizing.buttonLG,
     paddingHorizontal: spacing['2xl'],
   },
+  xl: {
+    height: sizing.buttonXL,
+    paddingHorizontal: spacing['2xl'],
+  },
 };
 
 const textSizeStyles: Record<ButtonSize, TextStyle> = {
   sm: { fontSize: 14 },
   md: { fontSize: 16 },
   lg: { fontSize: 18 },
+  xl: { fontSize: 18 },
 };
 
 const styles = StyleSheet.create({
@@ -270,7 +285,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryButton: {
-    ...shadows.lg,
+    borderRadius: radius.lg,
   },
   secondaryButton: {
     backgroundColor: colors.surface.tint,

@@ -13,7 +13,7 @@
 export const colors = {
   // Primary background (warm neutral base)
   primary: {
-    bg: '#FFF6ED',        // Airy cream (main background)
+    bg: '#FFFFFF',        // Crisp white (main background)
     light: '#FFF9F3',     // Soft highlight tone
     dark: '#F4E8DA',      // Slightly richer cream for depth
   },
@@ -26,6 +26,14 @@ export const colors = {
     tint: 'rgba(255, 107, 74, 0.08)',      // Coral wash for accents
   },
 
+  // Neutral utility colors
+  neutral: {
+    charcoal: '#2D3748',
+    gray400: '#CBD5E0',
+    gray600: '#4A5568',
+    espresso: '#2B1A12',
+  },
+
   // Vibrant accent system (used sparingly)
   accent: {
     orange: '#FF6B4A',    // Primary orange energy
@@ -35,8 +43,8 @@ export const colors = {
     warning: '#E76F51',   // Burnt orange (caution)
     info: '#457B9D',      // Muted blue (information)
     primary: '#FF6B4A',   // Primary CTA accent
-    gradientStart: '#FF6B4A', // Refined red-orange gradient start
-    gradientEnd: '#FF4581',   // Refined red-pink gradient end
+    gradientStart: '#FF6B4A', // Solid orange gradient start
+    gradientEnd: '#FF6B4A',   // Solid orange gradient end
   },
 
   // Glassmorphism effect colors (on cream background)
@@ -62,6 +70,13 @@ export const colors = {
     medium: 'rgba(255, 69, 129, 0.18)',    // Medium pink-orange border
     dark: 'rgba(0, 0, 0, 0.12)',           // Neutral divider
   },
+
+  // Scrims and overlays
+  overlay: {
+    scrim: 'rgba(45, 45, 45, 0.45)',
+    navigation: '#000000',
+    scrimTransparent: 'rgba(45, 45, 45, 0)',
+  },
 };
 
 // ============================================================================
@@ -70,9 +85,9 @@ export const colors = {
 
 export const gradients = {
   accentBreathing: {
-    start: ['#FF6B4A', '#FF4581'] as const,
-    mid: ['#FF7A5A', '#FF5591'] as const,
-    end: ['#FF6B4A', '#FF4581'] as const,
+    start: ['#FF6B4A', '#FF6B4A'] as const,
+    mid: ['#FF6B4A', '#FF6B4A'] as const,
+    end: ['#FF6B4A', '#FF6B4A'] as const,
   },
 };
 
@@ -81,12 +96,16 @@ export const gradients = {
 // ============================================================================
 
 export const spacing = {
-  xs: 4,      // 4px (tight spacing)
-  sm: 8,      // 8px (small gaps)
-  md: 16,     // 16px (default/standard)
-  lg: 24,     // 24px (large sections)
-  xl: 32,     // 32px (major sections)
-  '2xl': 48,  // 48px (very large spacing)
+  xxxs: 1,      // 1px (ultra-tight adjustments)
+  xxs: 2,       // 2px (micro adjustments)
+  xs: 4,       // 4px (tight spacing)
+  sm: 8,       // 8px (small gaps)
+  md: 16,      // 16px (default/standard)
+  mdCompact: 12, // 12px (compact vertical padding)
+  formField: 8, // 8px spacing between label/input
+  lg: 24,      // 24px (large sections)
+  xl: 32,      // 32px (major sections)
+  '2xl': 48,   // 48px (very large spacing)
 };
 
 // ============================================================================
@@ -96,6 +115,7 @@ export const spacing = {
 export const radius = {
   sm: 8,      // 8px (subtle rounding)
   md: 16,     // 16px (standard cards)
+  mdCompact: 12, // 12px (compact cards)
   lg: 24,     // 24px (large containers, modals)
   xl: 32,     // 32px (very rounded)
   full: 9999, // Full circle
@@ -125,6 +145,26 @@ export const typography = {
     fontSize: 20,
     fontWeight: '600',
     lineHeight: 28,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '400',
+    lineHeight: 18,
+  },
+  labelMedium: {
+    fontSize: 14,
+    fontWeight: '500',
+    lineHeight: 20,
+  },
+  captionMedium: {
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+  statValue: {
+    fontSize: 32,
+    fontWeight: '700',
+    lineHeight: 40,
   },
   body: {
     fontSize: 16,
@@ -162,17 +202,22 @@ export const sizing = {
 
   // Calendar bubbles
   weekBubble: 40,
+  exerciseBadge: 40,
 
   // Component heights
   buttonSM: 36,
   buttonMD: 44,
   buttonLG: 52,
+  buttonXL: 56,
 
   // Input heights
   inputHeight: 48,
 
   // Tab bar height
   tabBarHeight: 64,
+
+  // Overlay dimensions
+  overlayShadeHeight: 50,
 };
 
 // ============================================================================
@@ -186,6 +231,13 @@ export const shadows = {
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  cardSoft: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   md: {
     shadowColor: '#000',

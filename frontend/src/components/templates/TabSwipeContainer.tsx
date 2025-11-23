@@ -8,7 +8,7 @@ import React, { ReactNode, useMemo } from 'react';
 import { Platform, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, sizing, spacing } from '@/constants/theme';
+import { colors, sizing, spacing, zIndex } from '@/constants/theme';
 
 interface TabSwipeContainerProps {
   /** Screen content */
@@ -45,25 +45,31 @@ export const TabSwipeContainer: React.FC<TabSwipeContainerProps> = ({
   );
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        scrollEventThrottle={16}
-        nestedScrollEnabled
-        decelerationRate={momentumDeceleration}
-        overScrollMode="always"
-        bounces={Platform.OS === 'ios'}
-        alwaysBounceVertical={Platform.OS === 'ios'}
-        showsVerticalScrollIndicator={showsVerticalScrollIndicator}
-        contentContainerStyle={composedContentStyle}
-      >
-        {children}
-      </ScrollView>
+    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.scrollView}
+          scrollEventThrottle={16}
+          nestedScrollEnabled
+          decelerationRate={momentumDeceleration}
+          overScrollMode="always"
+          bounces={Platform.OS === 'ios'}
+          alwaysBounceVertical={Platform.OS === 'ios'}
+          showsVerticalScrollIndicator={showsVerticalScrollIndicator}
+          contentContainerStyle={composedContentStyle}
+        >
+          {children}
+        </ScrollView>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: colors.primary.bg,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.primary.bg,

@@ -2,7 +2,7 @@
  * CustomTabBar
  * Floating, glassmorphism tab bar with animated interactions and haptics.
  */
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Platform, StyleSheet, View, TouchableOpacity } from 'react-native';
 import type { ColorValue } from 'react-native';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -19,9 +19,10 @@ import MaskedView from '@react-native-masked-view/masked-view';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, spacing, radius, sizing, shadows, zIndex } from '@/constants/theme';
+import { colors, spacing, radius, sizing, zIndex, shadows } from '@/constants/theme';
 import { springBouncy } from '@/constants/animations';
 import { TAB_META } from '@/constants/navigation';
+import { useSessionStore } from '@/store/sessionStore';
 
 const ICON_SIZE = sizing.iconLG;
 const BLUR_INTENSITY = 100;
@@ -29,7 +30,7 @@ const TAB_HORIZONTAL_INSET = spacing.sm;
 const TAB_MINIMUM_BOTTOM_GAP = spacing.xs / 2;
 const TAB_FLOAT_LIFT = spacing.lg;
 const TAB_SURFACE_COLOR = colors.surface.card;
-const TAB_BACKGROUND_COLOR = colors.primary.bg;
+const TAB_BORDER_COLOR = colors.primary.light;
 const BLUR_METHOD: ExperimentalBlurMethod | undefined = Platform.OS === 'android' ? 'dimezisBlurView' : undefined;
 const BLUR_REDUCTION_FACTOR: number | undefined = Platform.OS === 'android' ? 1 : undefined;
 const ACTIVE_GRADIENT: readonly [ColorValue, ColorValue] = [
@@ -58,11 +59,11 @@ const createGradientIcon = (iconName: keyof typeof Ionicons.glyphMap) => (
 
 export const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation }) => {
   const insets = useSafeAreaInsets();
+  const isSessionActive = useSessionStore((store) => store.isSessionActive);
   const scalesRef = useRef<SharedValue<number>[]>(state.routes.map(() => useSharedValue(1)));
 
-  const safeBottom = Math.max(insets.bottom, TAB_MINIMUM_BOTTOM_GAP);
-  const bottomBlanketHeight = safeBottom + TAB_MINIMUM_BOTTOM_GAP;
-  const bottomOffset = Math.max(safeBottom - TAB_FLOAT_LIFT, TAB_MINIMUM_BOTTOM_GAP);
+  const deviceSafeBottom = Math.max(insets.bottom, 0);
+  const bottomOffset = deviceSafeBottom + spacing.sm;
   const containerInsets = {
     left: TAB_HORIZONTAL_INSET,
     right: TAB_HORIZONTAL_INSET,
@@ -86,8 +87,42 @@ export const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation })
   };
   return (
     <>
-      <View pointerEvents="none" style={[styles.bottomBlanket, { height: bottomBlanketHeight }]} />
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: bottomOffset,
+          backgroundColor: colors.primary.bg,
+          zIndex: zIndex.modal - 1,
+        }}
+      />
       <View pointerEvents="box-none" style={[styles.positioner, containerInsets]}>
+        {/* Corner patches to block content bleed-through in the rounded corner gaps */}
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            bottom: -1,
+            left: 0,
+            width: radius.xl,
+            height: radius.xl + 1,
+            backgroundColor: colors.primary.bg,
+          }}
+        />
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            bottom: -1,
+            right: 0,
+            width: radius.xl,
+            height: radius.xl + 1,
+            backgroundColor: colors.primary.bg,
+          }}
+        />
         <View style={styles.shadowWrapper}>
           <View style={styles.tabContainer}>
             <BlurView
@@ -105,7 +140,12 @@ export const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation })
                     return null;
                   }
 
-                  const isFocused = state.index === index;
+                  const currentRouteName = state.routes[state.index]?.name;
+                  const isCreatePlanScreen = currentRouteName === 'create-plan';
+                  const isPlansTab = route.name === 'plans';
+                  const isFocused = state.index === index || (isCreatePlanScreen && isPlansTab);
+                  const isWorkoutRoute = route.name === 'workout';
+                  const showActiveSessionGlow = isWorkoutRoute && isSessionActive;
                   const animatedStyle = useAnimatedStyle(() => ({
                     transform: [{ scale: scalesRef.current[index].value }],
                   }));
@@ -119,8 +159,22 @@ export const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation })
                         activeOpacity={1}
                         style={styles.touchable}
                       >
-                        {isFocused ? (
-                          createGradientIcon(tabMeta.icon)
+                        {showActiveSessionGlow ? (
+                          <Ionicons
+                            name="play"
+                            size={ICON_SIZE}
+                            color={colors.accent.orange}
+                          />
+                        ) : isFocused ? (
+                          isWorkoutRoute ? (
+                            <Ionicons
+                              name="play-outline"
+                              size={ICON_SIZE}
+                              color={colors.accent.orange}
+                            />
+                          ) : (
+                            createGradientIcon(tabMeta.icon)
+                          )
                         ) : (
                           <Ionicons
                             name={tabMeta.icon}
@@ -142,26 +196,21 @@ export const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation })
 };
 
 const styles = StyleSheet.create({
-  bottomBlanket: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: TAB_BACKGROUND_COLOR,
-    zIndex: zIndex.base,
-  },
   positioner: {
     position: 'absolute',
     zIndex: zIndex.modal,
   },
   shadowWrapper: {
     borderRadius: radius.xl,
+    backgroundColor: TAB_SURFACE_COLOR,
     ...shadows.lg,
   },
   tabContainer: {
     borderRadius: radius.xl,
     overflow: 'hidden',
     backgroundColor: TAB_SURFACE_COLOR,
+    borderColor: TAB_BORDER_COLOR,
+    borderWidth: spacing.xxxs,
   },
   blurShell: {
     borderRadius: radius.xl,
@@ -189,6 +238,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: spacing.xs,
+    overflow: 'visible',
   },
   maskContent: {
     width: ICON_SIZE,

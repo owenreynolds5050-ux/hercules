@@ -1,0 +1,11 @@
+# Environment variables
+.env
+
+# Dependencies
+node_modules/
+
+# Editor/IDE
+.idea/
+.vscode/
+*.log
+.DS_Store

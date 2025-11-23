@@ -33,6 +33,6 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({ title, subtitle }) =
 
 const styles = StyleSheet.create({
   container: {
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
 });

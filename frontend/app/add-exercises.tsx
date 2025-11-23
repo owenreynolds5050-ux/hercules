@@ -1,0 +1,416 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+
+import { Text } from '@/components/atoms/Text';
+import { InputField } from '@/components/atoms/InputField';
+import { Button } from '@/components/atoms/Button';
+import { SurfaceCard } from '@/components/atoms/SurfaceCard';
+import { FilterChip } from '@/components/atoms/FilterChip';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { ExerciseSelectionRow } from '@/components/molecules/ExerciseSelectionRow';
+import { FilterBottomSheet } from '@/components/molecules/FilterBottomSheet';
+import type { Exercise } from '@/constants/exercises';
+import { colors, radius, spacing, sizing, shadows } from '@/constants/theme';
+import { usePlanBuilderContext } from '@/providers/PlanBuilderProvider';
+import { countActiveFilters, getActiveFilterLabels } from '@/utils/exerciseFilters';
+
+interface SelectedExerciseMap {
+  [id: string]: Exercise;
+}
+
+const styles = StyleSheet.create({
+  container: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.primary.bg,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    gap: spacing.lg,
+    paddingBottom: spacing['2xl'] * 4,
+    paddingTop: spacing.xl,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    width: '100%',
+    marginBottom: spacing.sm,
+    gap: spacing.md,
+  },
+  titleGroup: {
+    gap: spacing.sm,
+    alignItems: 'flex-start',
+    flex: 1,
+  },
+  headerTitle: {
+    textAlign: 'left',
+  },
+  headerSubtitle: {
+    textAlign: 'left',
+    maxWidth: 320,
+  },
+  backButton: {
+    borderRadius: radius.lg,
+    marginLeft: spacing.sm,
+    paddingTop: spacing.xs,
+  },
+  difficultyChip: {
+    paddingHorizontal: spacing.sm,
+  },
+  filterButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  filterButton: {
+    flex: 1,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  filterButtonContent: {
+    backgroundColor: colors.surface.card,
+    borderColor: colors.accent.primary,
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 0,
+    elevation: 0,
+  },
+  activeFilterChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  searchSection: {
+    gap: spacing.md,
+  },
+  searchCard: {
+    position: 'relative',
+  },
+  listCard: {
+    gap: spacing.sm,
+    position: 'relative',
+  },
+  listFooterSpacer: {
+    width: '100%',
+    backgroundColor: colors.primary.bg,
+  },
+  emptyState: {
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  emptyStateText: {
+    textAlign: 'left',
+  },
+  floatingContainer: {
+    position: 'absolute',
+    left: spacing.sm,
+    right: spacing.sm,
+    bottom: 0,
+  },
+  floatingCard: {
+    padding: 0,
+    gap: 0,
+    ...shadows.cardSoft,
+  },
+  saveButton: {
+    width: '100%',
+  },
+  bottomOverlay: {
+    position: 'absolute',
+    left: spacing.sm,
+    right: spacing.sm,
+    bottom: 0,
+    backgroundColor: colors.primary.bg,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+  },
+  disabledButtonWrapper: {
+    opacity: 1,
+  },
+  disabledButtonContent: {
+    backgroundColor: colors.primary.bg,
+    borderWidth: 1,
+    borderColor: colors.accent.primary,
+    opacity: 1,
+  },
+});
+
+const AddExercisesScreen: React.FC = () => {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const {
+    searchTerm,
+    setSearchTerm,
+    filteredAvailableExercises,
+    handleAddExercises,
+    filters,
+    filterOptions,
+    toggleMuscleGroupFilter,
+    toggleSpecificMuscleFilter,
+    toggleEquipmentFilter,
+    toggleDifficultyFilter,
+    toggleBodyweightOnly,
+    toggleCompoundOnly,
+    resetFilters,
+  } = usePlanBuilderContext();
+
+  const [selectedMap, setSelectedMap] = useState<SelectedExerciseMap>({});
+  const [isFilterSheetVisible, setIsFilterSheetVisible] = useState(false);
+
+  useEffect(() => {
+    resetFilters();
+    setSearchTerm('');
+
+    return () => {
+      resetFilters();
+      setSearchTerm('');
+      setSelectedMap({});
+    };
+  }, [resetFilters, setSearchTerm]);
+
+  const selectedExercises = useMemo(() => Object.values(selectedMap), [selectedMap]);
+  const selectedCount = selectedExercises.length;
+  const hasExercises = filteredAvailableExercises.length > 0;
+  const activeFilterCount = useMemo(() => countActiveFilters(filters), [filters]);
+  const activeFilterLabels = useMemo(() => getActiveFilterLabels(filters), [filters]);
+  const hasActiveFilters = activeFilterCount > 0;
+  const floatingAreaHeight = useMemo(
+    () => Math.max(insets.bottom, 0) + spacing.md + spacing.sm * 2 + sizing.buttonLG,
+    [insets.bottom],
+  );
+  const bottomOverlayHeight = useMemo(() => floatingAreaHeight, [floatingAreaHeight]);
+
+  const handleToggleExercise = useCallback(
+    (exercise: Exercise) => {
+      setSelectedMap((prev) => {
+        if (prev[exercise.id]) {
+          const next = { ...prev };
+          delete next[exercise.id];
+          return next;
+        }
+
+        return {
+          ...prev,
+          [exercise.id]: exercise,
+        };
+      });
+    },
+    [],
+  );
+
+  const handleBackPress = useCallback(() => {
+    void Haptics.selectionAsync();
+    resetFilters();
+    setSearchTerm('');
+    router.back();
+  }, [resetFilters, router, setSearchTerm]);
+
+  const handleSavePress = useCallback(() => {
+    if (selectedCount === 0) {
+      return;
+    }
+
+    handleAddExercises(selectedExercises);
+    resetFilters();
+    setSearchTerm('');
+    setSelectedMap({});
+    router.back();
+  }, [handleAddExercises, resetFilters, router, selectedCount, selectedExercises, setSearchTerm]);
+
+  const handleOpenFilters = useCallback(() => {
+    void Haptics.selectionAsync();
+    setIsFilterSheetVisible(true);
+  }, []);
+
+  const handleCloseFilters = useCallback(() => {
+    void Haptics.selectionAsync();
+    setIsFilterSheetVisible(false);
+  }, []);
+
+  const handleApplyFilters = useCallback(() => {
+    void Haptics.selectionAsync();
+    setIsFilterSheetVisible(false);
+  }, []);
+
+  const handleRemoveFilter = useCallback(
+    (label: string) => {
+      void Haptics.selectionAsync();
+      if (label === 'Bodyweight') {
+        toggleBodyweightOnly();
+      } else if (label === 'Compound') {
+        toggleCompoundOnly();
+      } else if (filterOptions.muscleGroups.includes(label as any)) {
+        toggleMuscleGroupFilter(label as any);
+      } else if (filters.specificMuscles.includes(label as any)) {
+        toggleSpecificMuscleFilter(label as any);
+      } else if (filterOptions.equipment.includes(label as any)) {
+        toggleEquipmentFilter(label as any);
+      } else if (filterOptions.difficulty.includes(label as any)) {
+        toggleDifficultyFilter(label as any);
+      }
+    },
+    [
+      filterOptions,
+      filters.specificMuscles,
+      toggleBodyweightOnly,
+      toggleCompoundOnly,
+      toggleDifficultyFilter,
+      toggleEquipmentFilter,
+      toggleMuscleGroupFilter,
+      toggleSpecificMuscleFilter,
+    ],
+  );
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <KeyboardAwareScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: floatingAreaHeight + spacing.lg }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        enableOnAndroid
+        extraScrollHeight={spacing['2xl'] * 2}
+        keyboardOpeningTime={0}
+        enableAutomaticScroll={false}
+      >
+        <View style={styles.headerRow}>
+          <View style={styles.titleGroup}>
+            <Text variant="heading1" color="primary" style={styles.headerTitle} fadeIn>
+              Add exercises
+            </Text>
+            <Text variant="body" color="secondary" style={styles.headerSubtitle} fadeIn>
+              Choose movements to include in your plan. Already-added exercises are hidden.
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go Back"
+            onPress={handleBackPress}
+            style={styles.backButton}
+          >
+            <IconSymbol name="arrow-back" color={colors.text.primary} size={sizing.iconMD} />
+          </Pressable>
+        </View>
+
+        <SurfaceCard tone="card" padding="xl" showAccentStripe style={styles.searchCard}>
+          <View style={styles.searchSection}>
+            <InputField
+              label="Search exercises"
+              value={searchTerm}
+              onChangeText={setSearchTerm}
+              placeholder="Search by movement or muscle"
+              returnKeyType="search"
+              autoCapitalize="none"
+              testID="add-exercises-search"
+            />
+
+            <View style={styles.filterButtonRow}>
+              <Button
+                label={hasActiveFilters ? `Filters (${activeFilterCount})` : 'Filters'}
+                variant="light"
+                size="md"
+                onPress={handleOpenFilters}
+                style={styles.filterButton}
+                contentStyle={styles.filterButtonContent}
+                textColor={colors.accent.primary}
+              />
+              {hasActiveFilters ? (
+                <Button
+                  label="Reset"
+                  variant="ghost"
+                  size="md"
+                  onPress={resetFilters}
+                />
+              ) : null}
+            </View>
+
+            {hasActiveFilters ? (
+              <View style={styles.activeFilterChips}>
+                {activeFilterLabels.map((label) => (
+                  <FilterChip
+                    key={label}
+                    label={label}
+                    onRemove={() => handleRemoveFilter(label)}
+                    testID={`active-filter-${label}`}
+                  />
+                ))}
+              </View>
+            ) : null}
+          </View>
+        </SurfaceCard>
+
+        <SurfaceCard tone="card" padding="xl" showAccentStripe style={styles.listCard}>
+          {hasExercises ? (
+            filteredAvailableExercises.map((exercise) => (
+              <ExerciseSelectionRow
+                key={exercise.id}
+                exercise={exercise}
+                selected={Boolean(selectedMap[exercise.id])}
+                onToggle={handleToggleExercise}
+              />
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <Text variant="bodySemibold" color="primary" style={styles.emptyStateText}>
+                All set!
+              </Text>
+              <Text variant="body" color="secondary" style={styles.emptyStateText}>
+                You’ve already added every available exercise to this plan.
+              </Text>
+            </View>
+          )}
+        </SurfaceCard>
+
+        <View style={[styles.listFooterSpacer, { height: floatingAreaHeight }]} />
+
+      </KeyboardAwareScrollView>
+
+      <FilterBottomSheet
+        visible={isFilterSheetVisible}
+        filters={filters}
+        filterOptions={filterOptions}
+        onClose={handleCloseFilters}
+        onApply={handleApplyFilters}
+        toggleMuscleGroupFilter={toggleMuscleGroupFilter}
+        toggleSpecificMuscleFilter={toggleSpecificMuscleFilter}
+        toggleEquipmentFilter={toggleEquipmentFilter}
+        toggleDifficultyFilter={toggleDifficultyFilter}
+        toggleBodyweightOnly={toggleBodyweightOnly}
+        toggleCompoundOnly={toggleCompoundOnly}
+      />
+
+      <View pointerEvents="none" style={[styles.bottomOverlay, { height: bottomOverlayHeight }]} />
+
+      <View
+        style={[
+          styles.floatingContainer,
+          { paddingBottom: insets.bottom + spacing.md },
+        ]}
+        pointerEvents="box-none"
+      >
+        <View style={styles.floatingCard}>
+          <Button
+            label={selectedCount > 0 ? `Save exercises (${selectedCount})` : 'Save exercises'}
+            variant={selectedCount > 0 ? 'primary' : 'ghost'}
+            size="xl"
+            onPress={handleSavePress}
+            disabled={selectedCount === 0}
+            style={selectedCount === 0 ? [styles.saveButton, styles.disabledButtonWrapper] : styles.saveButton}
+            contentStyle={selectedCount === 0 ? styles.disabledButtonContent : undefined}
+            textColor={selectedCount === 0 ? colors.accent.primary : undefined}
+          />
+        </View>
+      </View>
+    </View>
+  );
+};
+
+export default AddExercisesScreen;

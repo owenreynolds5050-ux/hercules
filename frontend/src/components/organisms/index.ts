@@ -1,0 +1,1 @@
+export { WorkoutCompletionOverlay } from './WorkoutCompletionOverlay';

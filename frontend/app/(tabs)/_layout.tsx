@@ -1,13 +1,13 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View } from 'react-native';
 
 import { CustomTabBar } from '@/components/molecules/CustomTabBar';
 import { colors } from '@/constants/theme';
 
 export default function TabLayout() {
   return (
-    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+    <View style={styles.container}>
       <Tabs
         tabBar={(props) => <CustomTabBar {...props} />}
         screenOptions={{
@@ -28,13 +28,34 @@ export default function TabLayout() {
         <Tabs.Screen name="workout" options={{ title: 'Start Workout' }} />
         <Tabs.Screen name="plans" options={{ title: 'Plans' }} />
         <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+        <Tabs.Screen
+          name="create-plan"
+          options={{
+            href: null,
+            title: 'Create Plan',
+          }}
+        />
+        <Tabs.Screen
+          name="workout-success"
+          options={{
+            href: null,
+            title: 'Success',
+          }}
+        />
+        <Tabs.Screen
+          name="workout-detail"
+          options={{
+            href: null,
+            title: 'Workout Detail',
+          }}
+        />
       </Tabs>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = {
-  safeArea: {
+  container: {
     flex: 1,
     backgroundColor: colors.primary.bg,
   },

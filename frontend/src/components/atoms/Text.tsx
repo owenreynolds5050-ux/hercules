@@ -24,11 +24,24 @@ import { textFadeInAnimation } from '@/constants/animations';
 // TYPES
 // ============================================================================
 
-type TextVariant = 'display1' | 'heading1' | 'heading2' | 'heading3' | 'body' | 'bodySemibold' | 'caption' | 'captionSmall';
+type TextVariant =
+  | 'display1'
+  | 'heading1'
+  | 'heading2'
+  | 'heading3'
+  | 'label'
+  | 'labelMedium'
+  | 'statValue'
+  | 'captionMedium'
+  | 'body'
+  | 'bodySemibold'
+  | 'caption'
+  | 'captionSmall';
 type TextColor =
   | 'primary'
   | 'secondary'
   | 'tertiary'
+  | 'neutral'
   | 'orange'
   | 'red'
   | 'success'
@@ -86,6 +99,7 @@ export const Text: React.FC<TextComponentProps> = ({
     primary: colors.text.primary,
     secondary: colors.text.secondary,
     tertiary: colors.text.tertiary,
+    neutral: colors.neutral.gray600,
     orange: colors.accent.orange,
     red: colors.accent.red,
     success: colors.accent.success,

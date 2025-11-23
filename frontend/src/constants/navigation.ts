@@ -18,7 +18,7 @@ export interface TabMeta {
 export const TAB_META: TabMeta[] = [
   { route: 'index', icon: 'home-outline', label: 'Home' },
   { route: 'calendar', icon: 'calendar-outline', label: 'Calendar' },
-  { route: 'workout', icon: 'add-circle-outline', label: 'Add' },
+  { route: 'workout', icon: 'play-outline', label: 'Start' },
   { route: 'plans', icon: 'document-text-outline', label: 'History' },
   { route: 'profile', icon: 'flash-outline', label: 'Stats' },
 ];

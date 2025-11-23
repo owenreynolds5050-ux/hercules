@@ -7,7 +7,6 @@ import ParallaxScrollView from '@/components/organisms/parallax-scroll-view';
 import { ThemedText } from '@/components/atoms/themed-text';
 import { ThemedView } from '@/components/atoms/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
 
 export default function TabTwoScreen() {
   return (

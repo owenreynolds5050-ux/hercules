@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
+import React, { useCallback, useEffect, useMemo } from 'react';
+import { View, StyleSheet, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import type { ViewStyle } from 'react-native';
@@ -16,28 +16,24 @@ import Animated, {
 
 import { SurfaceCard } from '@/components/atoms/SurfaceCard';
 import { Text } from '@/components/atoms/Text';
+import { Button } from '@/components/atoms/Button';
+import { GradientText } from '@/components/atoms/GradientText';
 import { ScreenHeader } from '@/components/molecules/ScreenHeader';
 import { TabSwipeContainer } from '@/components/templates/TabSwipeContainer';
 import { colors, spacing, radius, shadows, sizing } from '@/constants/theme';
 import { MainTabRoute } from '@/constants/navigation';
 import { QuickLinkItem, RecentWorkoutSummary, WeekDayTracker } from '@/types/dashboard';
 import { createWeekTracker } from '@/utils/dashboard';
-
-const WORKOUT_ACTIVITY: boolean[] = [false, true, true, true, false, false, false];
-type WeekDayOverride = {
-  hasWorkout: boolean;
-  isToday: boolean;
-};
-
-const WEEK_DAY_OVERRIDES: WeekDayOverride[] = [
-  { hasWorkout: false, isToday: false },
-  { hasWorkout: true, isToday: false },
-  { hasWorkout: true, isToday: false },
-  { hasWorkout: true, isToday: true },
-  { hasWorkout: false, isToday: false },
-  { hasWorkout: false, isToday: false },
-  { hasWorkout: false, isToday: false },
-];
+import { useSchedulesStore, type SchedulesState } from '@/store/schedulesStore';
+import { usePlansStore, type Plan, type PlansState } from '@/store/plansStore';
+import { WEEKDAY_LABELS } from '@/constants/schedule';
+import type { ScheduleDayKey } from '@/types/schedule';
+import * as Haptics from 'expo-haptics';
+import { useWorkoutSessionsStore, type WorkoutSessionsState } from '@/store/workoutSessionsStore';
+import type { Workout, WorkoutExercise, SetLog } from '@/types/workout';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useSessionStore } from '@/store/sessionStore';
+import type { Schedule } from '@/types/schedule';
 
 const QUICK_LINKS: QuickLinkItem[] = [
   { id: 'link-workout', title: 'Start Workout', description: 'Log a fresh training session.', icon: 'flash-outline', route: 'workout', variant: 'primary' },
@@ -54,21 +50,19 @@ const TAB_ROUTE_PATHS: Record<MainTabRoute, Href> = {
   profile: '/(tabs)/profile',
 };
 
-const RECENT_WORKOUTS: RecentWorkoutSummary[] = [
-  { id: 'recent-1', date: 'Nov 4', exercise: 'Deadlift', volume: '2,400 lbs' },
-  { id: 'recent-2', date: 'Nov 3', exercise: 'Overhead Press', volume: '1,080 lbs' },
-  { id: 'recent-3', date: 'Nov 2', exercise: 'Back Squat', volume: '1,980 lbs' },
+const SCHEDULE_DAY_KEYS: ScheduleDayKey[] = [
+  'sunday',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
 ];
 
 const BUBBLE_DIAMETER = sizing.weekBubble;
+const DAY_BUBBLE_RADIUS = BUBBLE_DIAMETER / 2;
 const SCROLL_BOTTOM_PADDING = spacing.sm;
-const WEEKLY_TRACKER_DELAY_MS = 100;
-const TODAYS_PLAN_DELAY_MS = 200;
-const QUICK_LINKS_DELAY_MS = 300;
-const RECENT_WORKOUTS_DELAY_MS = 400;
-const CARD_ENTRY_DURATION_MS = 500;
-const DAY_POP_BUFFER_MS = 100;
-const DAY_POP_STAGGER_MS = 50;
 const CARD_LIFT_TRANSLATE = -2;
 const CARD_LIFT_DURATION_MS = 200;
 const CARD_PRESS_SCALE = 0.98;
@@ -81,6 +75,15 @@ const scaleUpSpringConfig = {
   damping: 15,
   stiffness: 300,
 };
+
+const DEFAULT_PLAN_SET_COUNT = 3;
+
+const createDefaultSetLogs = (): SetLog[] =>
+  Array.from({ length: DEFAULT_PLAN_SET_COUNT }, () => ({
+    reps: 8,
+    weight: 0,
+    completed: false,
+  }));
 
 type ShadowConfig = {
   shadowOpacity: number;
@@ -164,10 +167,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary.bg,
   },
   contentContainer: {
-    paddingTop: spacing['2xl'],
+    paddingTop: spacing.xl,
     paddingBottom: SCROLL_BOTTOM_PADDING,
     paddingHorizontal: spacing.md,
-    gap: spacing['2xl'],
+    gap: spacing.xl,
   },
   pressableStretch: {
     width: '100%',
@@ -176,7 +179,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   streakTitle: {
     flex: 1,
@@ -186,7 +189,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: spacing.md,
     marginHorizontal: -spacing.sm,
   },
   dayBubbleWrapper: {
@@ -197,21 +199,47 @@ const styles = StyleSheet.create({
   dayBubbleBase: {
     width: BUBBLE_DIAMETER,
     height: BUBBLE_DIAMETER,
-    borderRadius: radius.full,
+    borderRadius: DAY_BUBBLE_RADIUS,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dayBubbleBorder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: DAY_BUBBLE_RADIUS,
+    borderWidth: spacing.xxxs,
+    borderColor: colors.accent.orange,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.surface.card,
+  },
+  dayBubbleBorderWorkout: {
+    borderColor: colors.accent.orange,
+    backgroundColor: colors.accent.orange,
+  },
+  dayBubbleContent: {
+    width: '100%',
+    height: '100%',
+    borderRadius: DAY_BUBBLE_RADIUS - spacing.xxxs,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
   },
-  dayBubbleOutline: {
-    borderWidth: 1,
-    borderColor: colors.primary.dark,
-  },
-  dayBubbleFill: {
+  dayBubbleContentRest: {
     backgroundColor: colors.surface.card,
   },
-  gradientBubble: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: radius.full,
+  dayBubbleContentWorkout: {
+    backgroundColor: colors.accent.orange,
+  },
+  dayNumber: {
+    textAlign: 'center',
+  },
+  dayLabel: {
+    color: colors.text.secondary,
+    textAlign: 'center',
+  },
+  dayLabelToday: {
+    textAlign: 'center',
   },
   sectionHeading: { marginBottom: spacing.md },
   todaysPlanCard: {
@@ -231,7 +259,28 @@ const styles = StyleSheet.create({
   },
   todaysPlanContent: {
     padding: spacing.xl,
+    gap: spacing.md,
+  },
+  planStartButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  planStartButtonGradient: {
+    width: '100%',
+    height: '100%',
+    borderRadius: radius.full,
+    position: 'absolute',
+  },
+  todaysPlanSubCard: {
+    borderColor: 'transparent',
+  },
+  todaysPlanEmptyContent: {
     gap: spacing.sm,
+    width: '100%',
+  },
+  todaysPlanActions: {
+    marginTop: spacing.md,
+    width: '100%',
   },
   todaysMeta: {
     flexDirection: 'row',
@@ -254,9 +303,19 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
   },
   inlineCard: {
-    borderWidth: 1,
-    borderColor: colors.primary.dark,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.accent.orangeLight,
+    borderRadius: radius.lg,
     backgroundColor: colors.surface.card,
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
+  },
+  recentEmptyCard: {
+    borderWidth: 0,
+    borderColor: 'transparent',
   },
   quickLinkRow: {
     flexDirection: 'row',
@@ -284,57 +343,67 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.sm,
   },
-  accentUnderline: {
-    width: 56,
-    height: 3,
+  todaysPlanHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  todaysPlanInfo: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  todaysPlanStartButton: {
+    borderRadius: radius.md,
+  },
+  todaysPlanStartGradient: {
+    borderRadius: radius.md,
+    padding: spacing.xxxs,
+  },
+  todaysPlanStartContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface.card,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  todaysPlanStartIcon: {
+    width: spacing.lg,
+    height: spacing.lg,
     borderRadius: radius.full,
-    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  todaysPlanStartIconMask: {
+    width: spacing.lg,
+    height: spacing.lg,
+  },
+  todaysPlanStartIconFill: {
+    ...StyleSheet.absoluteFillObject,
   },
 });
 
 const DashboardScreen: React.FC = () => {
+  const workouts = useWorkoutSessionsStore((state: WorkoutSessionsState) => state.workouts);
+
   const weekTracker = useMemo<WeekDayTracker[]>(() => {
-    const baseWeek = createWeekTracker(WORKOUT_ACTIVITY);
+    return createWeekTracker(workouts);
+  }, [workouts]);
 
-    return baseWeek.map((day, index) => {
-      const override = WEEK_DAY_OVERRIDES[index];
-
-      if (!override) {
-        return day;
-      }
-
-      return {
-        ...day,
-        hasWorkout: override.hasWorkout,
-        isToday: override.isToday,
-      };
-    });
-  }, []);
-
-  const getDayVariant = (day: WeekDayTracker): 'rest' | 'workout' | 'todayRest' | 'todayWorkout' => {
-    if (day.isToday && day.hasWorkout) {
-      return 'todayWorkout';
-    }
-
-    if (day.isToday) {
-      return 'todayRest';
-    }
-
-    if (day.hasWorkout) {
-      return 'workout';
-    }
-
-    return 'rest';
+  const getDayVariant = (day: WeekDayTracker): 'rest' | 'workout' => {
+    return day.hasWorkout ? 'workout' : 'rest';
   };
 
-  const weeklyTrackerTranslateY = useSharedValue<number>(20);
-  const weeklyTrackerOpacity = useSharedValue<number>(0);
-  const todaysPlanTranslateY = useSharedValue<number>(20);
-  const todaysPlanOpacity = useSharedValue<number>(0);
-  const quickLinksTranslateY = useSharedValue<number>(20);
-  const quickLinksOpacity = useSharedValue<number>(0);
-  const recentWorkoutsTranslateY = useSharedValue<number>(20);
-  const recentWorkoutsOpacity = useSharedValue<number>(0);
+  const weeklyTrackerTranslateY = useSharedValue<number>(0);
+  const weeklyTrackerOpacity = useSharedValue<number>(1);
+  const todaysPlanTranslateY = useSharedValue<number>(0);
+  const todaysPlanOpacity = useSharedValue<number>(1);
+  const quickLinksTranslateY = useSharedValue<number>(0);
+  const quickLinksOpacity = useSharedValue<number>(1);
+  const recentWorkoutsTranslateY = useSharedValue<number>(0);
+  const recentWorkoutsOpacity = useSharedValue<number>(1);
   const sunScale = useSharedValue<number>(0);
   const monScale = useSharedValue<number>(0);
   const tueScale = useSharedValue<number>(0);
@@ -344,32 +413,17 @@ const DashboardScreen: React.FC = () => {
   const satScale = useSharedValue<number>(0);
 
   useEffect(() => {
-    const animationConfig = {
-      duration: CARD_ENTRY_DURATION_MS,
-      easing: Easing.out(Easing.cubic),
-    };
-
-    weeklyTrackerTranslateY.value = withDelay(WEEKLY_TRACKER_DELAY_MS, withTiming(0, animationConfig));
-    weeklyTrackerOpacity.value = withDelay(WEEKLY_TRACKER_DELAY_MS, withTiming(1, animationConfig));
-    todaysPlanTranslateY.value = withDelay(TODAYS_PLAN_DELAY_MS, withTiming(0, animationConfig));
-    todaysPlanOpacity.value = withDelay(TODAYS_PLAN_DELAY_MS, withTiming(1, animationConfig));
-    quickLinksTranslateY.value = withDelay(QUICK_LINKS_DELAY_MS, withTiming(0, animationConfig));
-    quickLinksOpacity.value = withDelay(QUICK_LINKS_DELAY_MS, withTiming(1, animationConfig));
-    recentWorkoutsTranslateY.value = withDelay(RECENT_WORKOUTS_DELAY_MS, withTiming(0, animationConfig));
-    recentWorkoutsOpacity.value = withDelay(RECENT_WORKOUTS_DELAY_MS, withTiming(1, animationConfig));
-  }, []);
-
-  useEffect(() => {
     const springConfig = {
       damping: 12,
       stiffness: 200,
       mass: 0.5,
     };
 
-    const popInStartDelay = WEEKLY_TRACKER_DELAY_MS + CARD_ENTRY_DURATION_MS + DAY_POP_BUFFER_MS;
+    const popInStartDelay = 300;
+    const staggerMs = 50;
 
     [sunScale, monScale, tueScale, wedScale, thuScale, friScale, satScale].forEach((scale, index) => {
-      scale.value = withDelay(popInStartDelay + index * DAY_POP_STAGGER_MS, withSpring(1, springConfig));
+      scale.value = withDelay(popInStartDelay + index * staggerMs, withSpring(1, springConfig));
     });
   }, []);
 
@@ -432,9 +486,174 @@ const DashboardScreen: React.FC = () => {
   ];
 
   const router = useRouter();
+  const schedules = useSchedulesStore((state: SchedulesState) => state.schedules);
+  const hydrateSchedules = useSchedulesStore((state: SchedulesState) => state.hydrateSchedules);
+  const plans = usePlansStore((state: PlansState) => state.plans);
+  const hydratePlans = usePlansStore((state: PlansState) => state.hydratePlans);
+  const hydrateWorkouts = useWorkoutSessionsStore((state: WorkoutSessionsState) => state.hydrateWorkouts);
+  const startSession = useSessionStore((state) => state.startSession);
+  const setCompletionOverlayVisible = useSessionStore((state) => state.setCompletionOverlayVisible);
 
-  const weeklyCardLift = useCardLiftAnimation(shadowConfigs.sm, shadowConfigs.md);
-  const todaysPlanLift = useCardLiftAnimation(shadowConfigs.md, shadowConfigs.lg);
+  useEffect(() => {
+    void hydrateSchedules();
+  }, [hydrateSchedules]);
+
+  useEffect(() => {
+    void hydratePlans();
+  }, [hydratePlans]);
+
+  useEffect(() => {
+    void hydrateWorkouts();
+  }, [hydrateWorkouts]);
+
+  const todayKey: ScheduleDayKey = useMemo(() => {
+    const dayIndex = new Date().getDay();
+    return SCHEDULE_DAY_KEYS[dayIndex];
+  }, []);
+
+  const todayLabel = useMemo(() => {
+    const match = WEEKDAY_LABELS.find((entry) => entry.key === todayKey);
+    return match?.label ?? 'Today';
+  }, [todayKey]);
+
+  const planNameLookup = useMemo(() => {
+    return plans.reduce<Record<string, Plan>>((acc, plan) => {
+      acc[plan.id] = plan;
+      return acc;
+    }, {});
+  }, [plans]);
+
+  const activeSchedule = schedules[0] ?? null;
+
+  type TodaysCardState =
+    | { variant: 'noSchedule' }
+    | { variant: 'noPlans' }
+    | { variant: 'rest'; dayLabel: string }
+    | { variant: 'plan'; dayLabel: string; plan: Plan }
+    | { variant: 'completed'; workout: Workout };
+
+  const todaysCardState: TodaysCardState = useMemo(() => {
+    // Check for completed workout today
+    const todayString = new Date().toDateString();
+    const todaysWorkouts = workouts.filter(w => {
+      const timestamp = w.endTime ?? w.startTime ?? new Date(w.date).getTime();
+      return new Date(timestamp).toDateString() === todayString;
+    });
+
+    if (todaysWorkouts.length > 0) {
+      // Sort by most recent
+      const latestWorkout = todaysWorkouts.sort((a, b) => {
+        const aTime = a.endTime ?? a.startTime ?? new Date(a.date).getTime();
+        const bTime = b.endTime ?? b.startTime ?? new Date(b.date).getTime();
+        return bTime - aTime;
+      })[0];
+      
+      return { variant: 'completed', workout: latestWorkout };
+    }
+
+    if (plans.length === 0) {
+      return { variant: 'noPlans' };
+    }
+
+    if (!activeSchedule) {
+      return { variant: 'noSchedule' };
+    }
+
+    const todaysPlanId = activeSchedule.weekdays[todayKey];
+
+    if (!todaysPlanId) {
+      return { variant: 'rest', dayLabel: todayLabel };
+    }
+
+    const plan = planNameLookup[todaysPlanId];
+
+    if (!plan) {
+      return { variant: 'rest', dayLabel: todayLabel };
+    }
+
+    return { variant: 'plan', dayLabel: todayLabel, plan };
+  }, [activeSchedule, planNameLookup, plans.length, todayKey, todayLabel, workouts]);
+
+  const todaysPlan = todaysCardState.variant === 'plan' ? todaysCardState.plan : null;
+
+  const handleTodaysCardPress = useCallback(() => {
+    if (todaysCardState.variant === 'plan' || todaysCardState.variant === 'noPlans') {
+      return;
+    }
+
+    void Haptics.selectionAsync();
+
+    if (todaysCardState.variant === 'completed') {
+      router.push({ pathname: '/(tabs)/workout-detail', params: { workoutId: todaysCardState.workout.id } });
+      return;
+    }
+
+    router.push('/schedule-editor');
+  }, [router, todaysCardState]);
+
+  const handleCreatePlanPress = useCallback(() => {
+    void Haptics.selectionAsync();
+    router.push('/(tabs)/create-plan');
+  }, [router]);
+
+  const handlePlanActionStart = useCallback(() => {
+    if (!todaysPlan) {
+      return;
+    }
+
+    void Haptics.selectionAsync();
+
+    // Explicitly reset overlay state before starting new session
+    setCompletionOverlayVisible(false);
+
+    const workoutExercises: WorkoutExercise[] = todaysPlan.exercises.map((exercise) => ({
+      name: exercise.name,
+      sets: createDefaultSetLogs(),
+    }));
+
+    startSession(todaysPlan.id, workoutExercises);
+    router.push('/(tabs)/workout');
+  }, [todaysPlan, startSession, router, setCompletionOverlayVisible]);
+
+  const recentWorkouts = useMemo<Workout[]>(() => {
+    if (workouts.length === 0) {
+      return [];
+    }
+
+    return [...workouts]
+      .sort((a, b) => {
+        const aTimestamp = a.endTime ?? a.startTime ?? new Date(a.date).getTime();
+        const bTimestamp = b.endTime ?? b.startTime ?? new Date(b.date).getTime();
+        return bTimestamp - aTimestamp;
+      })
+      .slice(0, 3);
+  }, [workouts]);
+
+  const formatWorkoutSubtitle = useCallback((workout: Workout) => {
+    const completedExercises = workout.exercises.filter((exercise) =>
+      exercise.sets.length > 0 ? exercise.sets.every((set) => set.completed) : false
+    );
+    const completedCount = completedExercises.length;
+    const base = `${completedCount} completed ${completedCount === 1 ? 'exercise' : 'exercises'}`;
+    const durationMinutes = workout.duration ? Math.max(Math.round(workout.duration / 60), 1) : null;
+
+    if (durationMinutes) {
+      return `${base} · ${durationMinutes} min session`;
+    }
+
+    return base;
+  }, []);
+
+  const formatWorkoutDateLabel = useCallback((workout: Workout) => {
+    const timestamp = workout.endTime ?? workout.startTime ?? new Date(workout.date).getTime();
+    const date = new Date(timestamp);
+
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+  }, []);
+
   const quickLinkLiftOne = useCardLiftAnimation(shadowConfigs.sm, shadowConfigs.md);
   const quickLinkLiftTwo = useCardLiftAnimation(shadowConfigs.sm, shadowConfigs.md);
   const quickLinkLiftThree = useCardLiftAnimation(shadowConfigs.sm, shadowConfigs.md);
@@ -456,15 +675,11 @@ const DashboardScreen: React.FC = () => {
       >
         <View style={styles.container}>
           <View style={styles.contentContainer}>
-            <ScreenHeader title="Hello Owen!" subtitle="Track your lifts and keep the streak alive." />
+            <ScreenHeader title="Dashboard" subtitle="Stay on top of your training journey." />
 
           <Animated.View style={weeklyTrackerAnimatedStyle}>
-            <Pressable
-              style={styles.pressableStretch}
-              onPressIn={weeklyCardLift.onPressIn}
-              onPressOut={weeklyCardLift.onPressOut}
-            >
-              <SurfaceCard tone="card" padding="lg" style={weeklyCardLift.animatedStyle}>
+            <Pressable style={styles.pressableStretch}>
+              <SurfaceCard tone="card" padding="lg" style={{ borderWidth: 0 }}>
                 <View style={styles.streakHeader}>
                   <View style={styles.streakTitle}>
                     <Text variant="heading3" color="primary">
@@ -474,34 +689,42 @@ const DashboardScreen: React.FC = () => {
                 </View>
 
                 <View style={styles.weekRow}>
-                  {weekTracker.map((day, index) => (
-                    <View key={day.id} style={styles.dayBubbleWrapper}>
-                      <Animated.View style={[styles.dayBubbleBase, styles.dayBubbleOutline, dayAnimatedStyles[index]]}>
-                        {(() => {
-                          const variant = getDayVariant(day);
+                  {weekTracker.map((day, index) => {
+                    const variant = getDayVariant(day);
+                    const isWorkoutDay = variant === 'workout';
+                    const isToday = day.isToday;
+                    const borderStyle = isWorkoutDay
+                      ? [styles.dayBubbleBorder, styles.dayBubbleBorderWorkout]
+                      : styles.dayBubbleBorder;
+                    const contentStyle = [
+                      styles.dayBubbleContent,
+                      isWorkoutDay ? styles.dayBubbleContentWorkout : styles.dayBubbleContentRest,
+                    ];
+                    const dayNumberColor: 'primary' | 'onAccent' = isWorkoutDay ? 'onAccent' : 'primary';
 
-                          if (variant === 'workout' || variant === 'todayWorkout') {
-                            return (
-                              <LinearGradient
-                                colors={[colors.accent.gradientStart, colors.accent.gradientEnd]}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                                style={styles.gradientBubble}
-                              />
-                            );
-                          }
-
-                          return <View style={[styles.gradientBubble, styles.dayBubbleFill]} />;
-                        })()}
-                        <Text variant="bodySemibold" color={getDayVariant(day) === 'todayWorkout' ? 'onAccent' : 'primary'}>
-                          {day.date}
-                        </Text>
-                      </Animated.View>
-                      <Text variant="caption" color="secondary">
-                        {day.label}
-                      </Text>
-                    </View>
-                  ))}
+                    return (
+                      <View key={day.id} style={styles.dayBubbleWrapper}>
+                        <Animated.View style={[styles.dayBubbleBase, dayAnimatedStyles[index]]}>
+                          <View style={borderStyle}>
+                            <View style={contentStyle}>
+                              <Text variant="bodySemibold" color={dayNumberColor}>
+                                {day.date}
+                              </Text>
+                            </View>
+                          </View>
+                        </Animated.View>
+                        {isToday ? (
+                          <GradientText variant="caption" style={styles.dayLabelToday}>
+                            {day.label}
+                          </GradientText>
+                        ) : (
+                          <Text variant="caption" color="secondary" style={styles.dayLabel}>
+                            {day.label}
+                          </Text>
+                        )}
+                      </View>
+                    );
+                  })}
                 </View>
               </SurfaceCard>
             </Pressable>
@@ -510,10 +733,15 @@ const DashboardScreen: React.FC = () => {
           <Animated.View style={todaysPlanAnimatedStyle}>
             <Pressable
               style={styles.pressableStretch}
-              onPressIn={todaysPlanLift.onPressIn}
-              onPressOut={todaysPlanLift.onPressOut}
+              onPress={() => {
+                if (todaysPlan) {
+                  return;
+                }
+
+                handleTodaysCardPress();
+              }}
             >
-              <Animated.View style={[styles.todaysPlanCard, todaysPlanLift.animatedStyle]}>
+              <Animated.View style={styles.todaysPlanCard}>
                 <LinearGradient
                   colors={[colors.accent.gradientStart, colors.accent.gradientEnd]}
                   start={{ x: 0, y: 0 }}
@@ -523,21 +751,110 @@ const DashboardScreen: React.FC = () => {
                 />
                 <View style={styles.todaysPlanContent}>
                   <Text variant="heading3" color="primary">
-                    Today's Plan
+                    Today's Workout
                   </Text>
-                  <Text variant="heading2" color="primary">
-                    Pull Day
-                  </Text>
-                  <Text variant="body" color="secondary">
-                    6 exercises · 45 minutes
-                  </Text>
+                  {todaysCardState.variant === 'plan' ? (
+                    <SurfaceCard
+                      tone="neutral"
+                      padding="lg"
+                      showAccentStripe={false}
+                      style={[styles.inlineCard, styles.todaysPlanSubCard]}
+                    >
+                      <View style={styles.quickLinkRow}>
+                        <View style={styles.quickLinkInfo}>
+                          <Text variant="bodySemibold" color="primary">
+                            {todaysCardState.plan.name}
+                          </Text>
+                          <Text variant="body" color="secondary">
+                            {`${todaysCardState.plan.exercises.length} ${todaysCardState.plan.exercises.length === 1 ? 'exercise' : 'exercises'}`}
+                          </Text>
+                        </View>
+                        <Pressable
+                          style={styles.planStartButton}
+                          onPress={handlePlanActionStart}
+                          accessibilityRole="button"
+                          accessibilityLabel="Start today's workout"
+                        >
+                          <View style={styles.quickLinkButton}>
+                            <LinearGradient
+                              colors={[colors.accent.gradientStart, colors.accent.gradientEnd]}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 1 }}
+                              style={styles.planStartButtonGradient}
+                            />
+                            <Text variant="bodySemibold" color="onAccent">
+                              →
+                            </Text>
+                          </View>
+                        </Pressable>
+                      </View>
+                    </SurfaceCard>
+                  ) : todaysCardState.variant === 'completed' ? (
+                    <SurfaceCard
+                      tone="neutral"
+                      padding="lg"
+                      showAccentStripe={false}
+                      style={[styles.inlineCard, styles.todaysPlanSubCard]}
+                    >
+                      <View style={styles.recentCardHeader}>
+                        <Text variant="bodySemibold" color="primary">
+                          {todaysCardState.workout.planId
+                            ? planNameLookup[todaysCardState.workout.planId]?.name ?? `${formatWorkoutDateLabel(todaysCardState.workout)} Session`
+                            : `${formatWorkoutDateLabel(todaysCardState.workout)} Session`}
+                        </Text>
+                        <Text variant="body" color="secondary">
+                          {formatWorkoutDateLabel(todaysCardState.workout)}
+                        </Text>
+                      </View>
+                      <Text variant="body" color="secondary">
+                        {formatWorkoutSubtitle(todaysCardState.workout)}
+                      </Text>
+                    </SurfaceCard>
+                  ) : todaysCardState.variant === 'rest' ? (
+                    <>
+                      <Text variant="heading2" color="primary">
+                        Rest Day
+                      </Text>
+                      <Text variant="body" color="secondary">
+                        Recharge and get ready for your next workout.
+                      </Text>
+                    </>
+                  ) : todaysCardState.variant === 'noPlans' ? (
+                    <SurfaceCard
+                      tone="neutral"
+                      padding="lg"
+                      showAccentStripe={false}
+                      style={[styles.inlineCard, styles.todaysPlanSubCard]}
+                    >
+                      <View style={styles.todaysPlanEmptyContent}>
+                        <Text variant="bodySemibold" color="primary">
+                          Create a workout plan
+                        </Text>
+                        <Text variant="body" color="secondary">
+                          No workout plans yet. Build one to see it here.
+                        </Text>
+                        <View style={styles.todaysPlanActions}>
+                          <Button label="Create Workout Plan" size="md" onPress={handleCreatePlanPress} />
+                        </View>
+                      </View>
+                    </SurfaceCard>
+                  ) : (
+                    <>
+                      <Text variant="heading2" color="primary">
+                        Add Your Schedule
+                      </Text>
+                      <Text variant="body" color="secondary">
+                        Assign workouts to your week to see them here.
+                      </Text>
+                    </>
+                  )}
                 </View>
               </Animated.View>
             </Pressable>
           </Animated.View>
 
           <Animated.View style={quickLinksAnimatedStyle}>
-            <SurfaceCard tone="card" padding="xl">
+            <SurfaceCard tone="card" padding="xl" style={{ borderWidth: 0 }}>
               <Text variant="heading3" color="primary" style={styles.sectionHeading}>
                 Quick Links
               </Text>
@@ -573,7 +890,13 @@ const DashboardScreen: React.FC = () => {
                             colors={[colors.accent.gradientStart, colors.accent.gradientEnd]}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
-                            style={{ width: '100%', height: '100%', borderRadius: radius.full, opacity: link.variant === 'primary' ? 1 : 0.12, position: 'absolute' }}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              borderRadius: radius.full,
+                              opacity: link.variant === 'primary' ? 1 : 0.12,
+                              position: 'absolute',
+                            }}
                           />
                           <Text variant="bodySemibold" color={link.variant === 'primary' ? 'onAccent' : 'orange'}>
                             →
@@ -588,46 +911,65 @@ const DashboardScreen: React.FC = () => {
           </Animated.View>
 
           <Animated.View style={recentWorkoutsAnimatedStyle}>
-            <SurfaceCard tone="card" padding="xl">
+            <SurfaceCard tone="card" padding="xl" style={{ borderWidth: 0 }}>
               <Text variant="heading3" color="primary" style={styles.sectionHeading}>
                 Recent Workouts
               </Text>
               <View style={styles.recentWorkoutsList}>
-                {RECENT_WORKOUTS.map((workout, index) => (
-                  <Pressable
-                    key={workout.id}
-                    style={styles.pressableStretch}
-                    onPressIn={recentWorkoutLifts[index].onPressIn}
-                    onPressOut={recentWorkoutLifts[index].onPressOut}
+                {recentWorkouts.length > 0 ? (
+                  recentWorkouts.map((workout, index) => {
+                    const lift = recentWorkoutLifts[index];
+                    const planTitle = workout.planId ? planNameLookup[workout.planId]?.name : null;
+                    const workoutTitle = planTitle ?? `${formatWorkoutDateLabel(workout)} Session`;
+
+                    return (
+                      <Pressable
+                        key={workout.id}
+                        style={styles.pressableStretch}
+                        onPressIn={lift?.onPressIn}
+                        onPressOut={lift?.onPressOut}
+                        onPress={() => {
+                          lift?.onPressOut?.();
+                          void Haptics.selectionAsync();
+                          router.push({ pathname: '/workout-detail', params: { workoutId: workout.id } });
+                        }}
+                      >
+                        <SurfaceCard
+                          tone="neutral"
+                          padding="lg"
+                          showAccentStripe={false}
+                          style={[styles.inlineCard, lift?.animatedStyle]}
+                        >
+                          <View style={styles.recentCardHeader}>
+                            <Text variant="bodySemibold" color="primary">
+                              {workoutTitle}
+                            </Text>
+                            <Text variant="body" color="secondary">
+                              {formatWorkoutDateLabel(workout)}
+                            </Text>
+                          </View>
+                          <Text variant="body" color="secondary">
+                            {formatWorkoutSubtitle(workout)}
+                          </Text>
+                        </SurfaceCard>
+                      </Pressable>
+                    );
+                  })
+                ) : (
+                  <SurfaceCard
+                    tone="neutral"
+                    padding="lg"
+                    showAccentStripe={false}
+                    style={[styles.inlineCard, styles.recentEmptyCard]}
                   >
-                    <SurfaceCard
-                      tone="neutral"
-                      padding="lg"
-                      showAccentStripe={false}
-                      style={[styles.inlineCard, recentWorkoutLifts[index].animatedStyle]}
-                    >
-                      <View style={styles.recentCardHeader}>
-                        <Text variant="bodySemibold" color="primary">
-                          {workout.exercise}
-                        </Text>
-                        <Text variant="body" color="secondary">
-                          {workout.date}
-                        </Text>
-                      </View>
-                      <Text variant="body" color="secondary">
-                        Volume {workout.volume}
-                      </Text>
-                      <View style={[styles.accentUnderline, { marginTop: spacing.md }] }>
-                        <LinearGradient
-                          colors={[colors.accent.gradientStart, colors.accent.gradientEnd]}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={{ width: '100%', height: '100%', borderRadius: radius.full }}
-                        />
-                      </View>
-                    </SurfaceCard>
-                  </Pressable>
-                ))}
+                    <Text variant="bodySemibold" color="primary">
+                      No workouts yet
+                    </Text>
+                    <Text variant="body" color="secondary">
+                      Complete a workout session and it will appear here.
+                    </Text>
+                  </SurfaceCard>
+                )}
               </View>
             </SurfaceCard>
           </Animated.View>

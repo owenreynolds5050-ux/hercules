@@ -38,24 +38,27 @@ export const WeeklyStreakCard: React.FC<WeeklyStreakCardProps> = ({
       </View>
 
       <View style={styles.weekRow}>
-        {data.map((day) => (
-          <View key={day.id} style={styles.dayBubbleWrapper}>
-            <View
-              style={[
-                styles.dayBubble,
-                day.hasWorkout && styles.dayBubbleCompleted,
-                day.isToday && styles.dayBubbleToday,
-              ]}
-            >
-              <Text variant="bodySemibold" color="primary">
-                {day.date}
+        {data.map((day) => {
+          const dayTextColor: 'primary' | 'onAccent' = day.hasWorkout ? 'onAccent' : 'primary';
+          const bubbleStyles = [
+            styles.dayBubble,
+            day.hasWorkout ? styles.dayBubbleCompleted : null,
+            !day.hasWorkout && day.isToday ? styles.dayBubbleToday : null,
+          ];
+
+          return (
+            <View key={day.id} style={styles.dayBubbleWrapper}>
+              <View style={bubbleStyles}>
+                <Text variant="bodySemibold" color={dayTextColor}>
+                  {day.date}
+                </Text>
+              </View>
+              <Text variant="caption" color="secondary">
+                {day.label}
               </Text>
             </View>
-            <Text variant="caption" color="secondary">
-              {day.label}
-            </Text>
-          </View>
-        ))}
+          );
+        })}
       </View>
     </SurfaceCard>
   );
@@ -83,15 +86,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.surface.card,
-    borderWidth: 1,
-    borderColor: colors.border.light,
+    borderWidth: 2,
+    borderColor: colors.accent.orange,
   },
   dayBubbleCompleted: {
     borderColor: colors.accent.orange,
-    backgroundColor: colors.surface.subtle,
+    backgroundColor: colors.accent.orange,
   },
   dayBubbleToday: {
-    borderColor: colors.accent.primary,
+    borderColor: colors.accent.orange,
     backgroundColor: colors.surface.tint,
   },
 });

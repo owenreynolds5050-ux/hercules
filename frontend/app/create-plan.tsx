@@ -1,0 +1,430 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+
+import { Text } from '@/components/atoms/Text';
+import { SurfaceCard } from '@/components/atoms/SurfaceCard';
+import { Button } from '@/components/atoms/Button';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { PlanQuickBuilderCard } from '@/components/molecules/PlanQuickBuilderCard';
+import type { PlanQuickBuilderField } from '@/types/planQuickBuilder';
+import { PlanSelectedExerciseList } from '@/components/molecules/PlanSelectedExerciseList';
+import { useSemanticExerciseSearch } from '@/hooks/useSemanticExerciseSearch';
+import { type Plan, type PlansState, usePlansStore } from '@/store/plansStore';
+import type { PlanExercise, WorkoutPlan } from '@/types/plan';
+import { savePlan } from '@/utils/storage';
+import { exercises, type Exercise } from '@/constants/exercises';
+import { timingSlow } from '@/constants/animations';
+import { colors, radius, spacing, sizing, zIndex } from '@/constants/theme';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+const DEFAULT_PLAN_SET_COUNT = 3;
+
+type SubmitPlanResult = 'success' | 'missing-name' | 'no-exercises' | 'error';
+
+const createPlanIdentifier = (): string => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const styles = StyleSheet.create({
+  container: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.primary.bg,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    gap: spacing.sm,
+    paddingBottom: spacing['2xl'] * 4,
+  },
+  keyboardAvoider: {
+    flex: 1,
+  },
+  topSection: {
+    width: '100%',
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  backButtonContainer: {
+    borderRadius: radius.lg,
+    marginLeft: spacing.sm,
+    paddingTop: spacing.xs,
+  },
+  backButtonPressable: {
+    paddingVertical: spacing.xs,
+    paddingRight: spacing.sm,
+    paddingLeft: 0,
+    borderRadius: radius.lg,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  headerContent: {
+    gap: spacing.sm,
+    alignItems: 'flex-start',
+    flex: 1,
+  },
+  headerTitle: {
+    textAlign: 'left',
+  },
+  headerSubtitle: {
+    textAlign: 'left',
+    maxWidth: 320,
+  },
+  builderContainer: {
+    marginTop: -spacing.sm,
+  },
+  missingPlanCard: {
+    gap: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.accent.orangeLight,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface.card,
+    position: 'relative',
+  },
+});
+
+const CreatePlanScreen: React.FC = () => {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { planId } = useLocalSearchParams<{ planId?: string }>();
+  const editingPlanId = useMemo(() => {
+    if (!planId) {
+      return null;
+    }
+
+    return Array.isArray(planId) ? planId[0] ?? null : planId;
+  }, [planId]);
+  const scrollRef = useRef<ScrollView | null>(null);
+  const cardOffset = useRef<number>(0);
+  const fieldPositions = useRef<Record<PlanQuickBuilderField, number>>({
+    planName: 0,
+    search: 0,
+  });
+  const containerTranslateY = useSharedValue(SCREEN_HEIGHT);
+  const [planName, setPlanName] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedExercises, setSelectedExercises] = useState<Exercise[]>([]);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [focusedField, setFocusedField] = useState<PlanQuickBuilderField | null>(null);
+  const hasInitializedFromPlan = useRef<boolean>(false);
+  const [isNameDuplicate, setIsNameDuplicate] = useState<boolean>(false);
+
+  const persistPlan = usePlansStore((state: PlansState) => state.addPlan);
+  const updatePlanStore = usePlansStore((state: PlansState) => state.updatePlan);
+  const plans = usePlansStore((state: PlansState) => state.plans);
+  const editingPlan = useMemo<Plan | null>(() => {
+    if (!editingPlanId) {
+      return null;
+    }
+
+    return plans.find((plan) => plan.id === editingPlanId) ?? null;
+  }, [plans, editingPlanId]);
+  const selectedIds = selectedExercises.map((exercise) => exercise.id);
+  const suggestedExercises = useSemanticExerciseSearch(searchTerm, exercises, {
+    excludeIds: selectedIds,
+    limit: 6,
+  });
+
+  const isEditing = Boolean(editingPlanId);
+  const nameFieldLabel = 'Name';
+  const namePlaceholder = 'e.g. Push Day';
+  const selectedListTitle = 'Plan exercises';
+  const selectedListSubtitle = 'Tap to remove. Use arrows to reorder.';
+  const saveCtaLabel = isEditing ? 'Update Plan' : 'Save Plan';
+  const headerTitle = isEditing ? 'Edit Plan' : 'Create Plan';
+  const headerSubtitle = isEditing ? 'Update your workout template' : 'Build your workout template';
+
+  const animatedContainerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: containerTranslateY.value }],
+  }));
+
+  useEffect(() => {
+    containerTranslateY.value = withTiming(0, timingSlow);
+  }, [containerTranslateY]);
+
+  useEffect(() => {
+    if (!isEditing) {
+      hasInitializedFromPlan.current = false;
+      return;
+    }
+
+    if (editingPlan && !hasInitializedFromPlan.current) {
+      setPlanName(editingPlan.name);
+      setSelectedExercises(editingPlan.exercises);
+      setSearchTerm('');
+      hasInitializedFromPlan.current = true;
+    }
+  }, [editingPlan, isEditing]);
+
+  useEffect(() => {
+    const trimmedName = planName.trim();
+    
+    if (!trimmedName) {
+      setIsNameDuplicate(false);
+      return;
+    }
+
+    // Check if name is duplicate (excluding current plan if editing)
+    const isDuplicate = plans.some((plan) => {
+      if (isEditing && plan.id === editingPlanId) {
+        return false;
+      }
+      return plan.name.toLowerCase() === trimmedName.toLowerCase();
+    });
+
+    setIsNameDuplicate(isDuplicate);
+  }, [planName, plans, isEditing, editingPlanId]);
+
+  const handleAddExercise = useCallback((exercise: Exercise) => {
+    setSelectedExercises((prev) => {
+      const exists = prev.some((item) => item.id === exercise.id);
+
+      if (exists) {
+        return prev;
+      }
+
+      return [...prev, exercise];
+    });
+  }, []);
+
+  const handleRemoveExercise = useCallback((exerciseId: string) => {
+    setSelectedExercises((prev) => prev.filter((exercise) => exercise.id !== exerciseId));
+  }, []);
+
+  const handleReorderList = useCallback((newExercises: Exercise[]) => {
+    setSelectedExercises(newExercises);
+  }, []);
+
+  const handleCardLayout = useCallback((positionY: number) => {
+    cardOffset.current = positionY;
+  }, []);
+
+  const handleFieldLayout = useCallback((field: PlanQuickBuilderField, positionY: number) => {
+    fieldPositions.current[field] = positionY;
+  }, []);
+
+  const handleFieldFocus = useCallback((field: PlanQuickBuilderField) => {
+    const scrollView = scrollRef.current;
+    const fieldOffset = cardOffset.current + fieldPositions.current[field];
+    const desiredOffset = Math.max(fieldOffset - spacing.xs, cardOffset.current);
+
+    setFocusedField(field);
+
+    if (scrollView) {
+      scrollView.scrollTo({ y: Math.max(desiredOffset, 0), animated: true });
+    }
+  }, []);
+
+  const handleFieldBlur = useCallback(() => {
+    setFocusedField(null);
+  }, []);
+
+  const editingPlanCreatedAt = editingPlan?.createdAt ?? null;
+
+  const submitPlan = useCallback(async (): Promise<SubmitPlanResult> => {
+    const trimmedName = planName.trim();
+
+    if (!trimmedName) {
+      return 'missing-name';
+    }
+
+    if (selectedExercises.length === 0) {
+      return 'no-exercises';
+    }
+
+    const isEditingPlan = Boolean(editingPlanId);
+    const planIdentifier = isEditingPlan ? (editingPlanId as string) : createPlanIdentifier();
+    const createdAtTimestamp = isEditingPlan && editingPlanCreatedAt
+      ? editingPlanCreatedAt
+      : Date.now();
+    const planExercises: PlanExercise[] = selectedExercises.map((exercise) => ({
+      id: exercise.id,
+      name: exercise.name,
+      sets: DEFAULT_PLAN_SET_COUNT,
+    }));
+
+    const payload: WorkoutPlan = {
+      id: planIdentifier,
+      name: trimmedName,
+      exercises: planExercises,
+      createdAt: new Date(createdAtTimestamp).toISOString(),
+    };
+
+    try {
+      console.log('[create-plan] Submitting plan payload', payload);
+      await savePlan(payload);
+
+      if (isEditingPlan) {
+        updatePlanStore({
+          id: planIdentifier,
+          name: trimmedName,
+          exercises: selectedExercises,
+          createdAt: createdAtTimestamp,
+        });
+      } else {
+        persistPlan({
+          id: planIdentifier,
+          name: trimmedName,
+          exercises: selectedExercises,
+          createdAt: createdAtTimestamp,
+        });
+      }
+
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      return 'success';
+    } catch (error) {
+      console.error('[create-plan] Failed to persist plan', error);
+      return 'error';
+    }
+  }, [editingPlanCreatedAt, editingPlanId, persistPlan, planName, selectedExercises, updatePlanStore]);
+
+  const handleSavePlan = useCallback(async () => {
+    const trimmedName = planName.trim();
+
+    if (trimmedName.length === 0 || selectedExercises.length === 0) {
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const result = await submitPlan();
+
+      if (result === 'success') {
+        if (!isEditing) {
+          setPlanName('');
+          setSearchTerm('');
+          setSelectedExercises([]);
+        }
+        router.back();
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  }, [isEditing, planName, router, selectedExercises, submitPlan]);
+
+  const handleBackPress = useCallback(() => {
+    void Haptics.selectionAsync();
+
+    containerTranslateY.value = withTiming(
+      SCREEN_HEIGHT,
+      timingSlow,
+      (finished) => {
+        if (finished) {
+          runOnJS(router.back)();
+        }
+      }
+    );
+  }, [containerTranslateY, router]);
+
+  return (
+    <Animated.View style={[styles.container, { paddingTop: spacing.lg + insets.top }, animatedContainerStyle]}>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoider}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={spacing['2xl']}
+      >
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          <View style={styles.topSection}>
+            <View style={styles.headerContent}>
+              <Text variant="heading1" color="primary" style={styles.headerTitle} fadeIn>
+                {headerTitle}
+              </Text>
+              <Text variant="body" color="secondary" style={styles.headerSubtitle} fadeIn>
+                {headerSubtitle}
+              </Text>
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Go Back"
+              style={styles.backButtonContainer}
+              onPress={handleBackPress}
+            >
+              <IconSymbol name="arrow-back" size={sizing.iconMD} color={colors.text.primary} />
+            </Pressable>
+          </View>
+
+          {isEditing && !editingPlan ? (
+            <SurfaceCard tone="neutral" padding="xl" showAccentStripe={false} style={styles.missingPlanCard}>
+              <Text variant="bodySemibold" color="primary">
+                Plan unavailable
+              </Text>
+              <Text variant="body" color="secondary">
+                We couldn’t find the plan you’re trying to edit. Please go back and select another plan.
+              </Text>
+              <Button label="Go Back" variant="secondary" onPress={router.back} />
+            </SurfaceCard>
+          ) : null}
+
+          <View style={styles.builderContainer}>
+            <PlanQuickBuilderCard
+              planName={planName}
+              onPlanNameChange={setPlanName}
+              searchTerm={searchTerm}
+              onSearchTermChange={setSearchTerm}
+              suggestions={suggestedExercises}
+              onAddExercise={handleAddExercise}
+              onCardLayout={handleCardLayout}
+              onFieldLayout={handleFieldLayout}
+              onFieldFocus={handleFieldFocus}
+              onFieldBlur={handleFieldBlur}
+              onFocusSearch={() => handleFieldFocus('search')}
+              isFieldFocused={focusedField !== null}
+              planNameLabel={nameFieldLabel}
+              planNamePlaceholder={namePlaceholder}
+              isNameDuplicate={isNameDuplicate}
+            />
+          </View>
+
+          <PlanSelectedExerciseList
+            exercises={selectedExercises}
+            onRemoveExercise={handleRemoveExercise}
+            onAddExercises={() => handleFieldFocus('search')}
+            onReorder={handleReorderList}
+            onReorderExercises={(fromIndex, toIndex) => {
+              const newExercises = [...selectedExercises];
+              const [moved] = newExercises.splice(fromIndex, 1);
+              newExercises.splice(toIndex, 0, moved);
+              handleReorderList(newExercises);
+            }}
+            onSave={handleSavePlan}
+            isSaveDisabled={planName.trim().length === 0 || selectedExercises.length === 0 || isSaving || isNameDuplicate}
+            isSaving={isSaving}
+            title={selectedListTitle}
+            subtitle={selectedListSubtitle}
+            saveLabel={saveCtaLabel}
+          />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Animated.View>
+  );
+};
+
+export default CreatePlanScreen;

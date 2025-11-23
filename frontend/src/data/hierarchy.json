@@ -1,0 +1,23 @@
+{
+  "muscle_hierarchy": {
+    "Upper Body": {
+      "Chest": ["Chest"],
+      "Back": ["Back", "Lats", "Traps"],
+      "Shoulders": ["Shoulders", "Front Delts", "Lateral Delts", "Rear Delts"],
+      "Arms": ["Biceps", "Triceps", "Forearms"]
+    },
+    "Lower Body": {
+      "Quads": ["Quads"],
+      "Glutes": ["Glutes"],
+      "Hamstrings": ["Hamstrings"],
+      "Calves": ["Calves", "Tibialis Anterior"],
+      "Adductors": ["Adductors"],
+      "Abductors": ["Abductors"]
+    },
+    "Core": {
+      "Abs": ["Abs"],
+      "Obliques": ["Obliques"],
+      "Lower Back": ["Lower Back"]
+    }
+  }
+}

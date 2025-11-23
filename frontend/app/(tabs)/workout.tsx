@@ -1,6 +1,5 @@
 import React, { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import { Button } from '@/components/atoms/Button';
@@ -8,9 +7,12 @@ import { Text } from '@/components/atoms/Text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SurfaceCard } from '@/components/atoms/SurfaceCard';
 import { TabSwipeContainer } from '@/components/templates/TabSwipeContainer';
-import { colors, sizing, spacing } from '@/constants/theme';
-
-const MY_PLANS: readonly string[] = ['Push Day', 'Pull Day', 'Leg Day'];
+import { colors, radius, sizing, spacing } from '@/constants/theme';
+import { usePlansStore, type Plan, type PlansState } from '@/store/plansStore';
+import { useSessionStore } from '@/store/sessionStore';
+import type { WorkoutExercise } from '@/types/workout';
+import WorkoutSessionScreen from '../workout-session';
+import { WorkoutCompletionOverlay } from '@/components/organisms';
 
 const styles = StyleSheet.create({
   contentContainer: {
@@ -54,8 +56,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   planCard: {
-    borderWidth: 1,
-    borderColor: colors.primary.dark,
+    borderRadius: radius.lg,
     backgroundColor: colors.surface.card,
   },
   planCardContent: {
@@ -64,41 +65,78 @@ const styles = StyleSheet.create({
 });
 
 const WorkoutScreen: React.FC = () => {
-  const router = useRouter();
-  const [showOptions, setShowOptions] = useState<boolean>(false);
   const [showPlansList, setShowPlansList] = useState<boolean>(false);
-
-  const handleStartPress = () => {
-    setShowOptions(true);
-  };
+  const plans = usePlansStore((state: PlansState) => state.plans);
+  const startSession = useSessionStore((state) => state.startSession);
+  const isSessionActive = useSessionStore((state) => state.isSessionActive);
+  const currentSession = useSessionStore((state) => state.currentSession);
+  const isCompletionOverlayVisible = useSessionStore((state) => state.isCompletionOverlayVisible);
+  const setCompletionOverlayVisible = useSessionStore((state) => state.setCompletionOverlayVisible);
 
   const handleBack = () => {
     Haptics.selectionAsync();
-    if (showPlansList) {
-      setShowPlansList(false);
-      return;
-    }
-    setShowOptions(false);
+    setShowPlansList(false);
   };
 
   const handleStartFromPlan = () => {
     setShowPlansList(true);
   };
 
-  const handleStartFromScratch = () => {
-    router.push('/modal');
-  };
+  const createDefaultSetLogs = useCallback((): WorkoutExercise['sets'] => {
+    return Array.from({ length: 3 }, () => ({ reps: 8, weight: 0, completed: false }));
+  }, []);
+
+  const handlePlanSelect = useCallback(
+    (plan: Plan) => {
+      void Haptics.selectionAsync();
+
+      // Explicitly reset overlay state before starting new session
+      setCompletionOverlayVisible(false);
+
+      const mappedExercises: WorkoutExercise[] = plan.exercises.map((exercise) => ({
+        name: exercise.name,
+        sets: createDefaultSetLogs(),
+      }));
+
+      startSession(plan.id, mappedExercises);
+      setShowPlansList(false);
+    },
+    [createDefaultSetLogs, startSession, setCompletionOverlayVisible],
+  );
+
+  const handleStartFromScratch = useCallback(() => {
+    void Haptics.selectionAsync();
+    
+    // Explicitly reset overlay state before starting new session
+    setCompletionOverlayVisible(false);
+    
+    startSession(null, []);
+    setShowPlansList(false);
+  }, [startSession, setCompletionOverlayVisible]);
 
   useFocusEffect(
     useCallback(() => {
-      setShowOptions(false);
       setShowPlansList(false);
     }, [])
   );
 
+  if (isSessionActive && currentSession) {
+    return (
+      <>
+        {isCompletionOverlayVisible ? (
+          <WorkoutCompletionOverlay onDismiss={() => setCompletionOverlayVisible(false)} />
+        ) : null}
+        <WorkoutSessionScreen />
+      </>
+    );
+  }
+
   return (
     <TabSwipeContainer contentContainerStyle={styles.contentContainer}>
-      {showOptions ? (
+      {isCompletionOverlayVisible ? (
+        <WorkoutCompletionOverlay onDismiss={() => setCompletionOverlayVisible(false)} />
+      ) : null}
+      {showPlansList ? (
         <View style={styles.topBar}>
           <Pressable style={styles.backIconButton} onPress={handleBack} hitSlop={spacing.sm}>
             <IconSymbol name="arrow-back" color={colors.text.primary} size={sizing.iconMD} />
@@ -106,55 +144,60 @@ const WorkoutScreen: React.FC = () => {
         </View>
       ) : null}
       <View style={styles.heroContainer}>
-        {showOptions ? (
-          showPlansList ? (
-            <>
-              <Text variant="display1" color="primary" style={styles.heroTitle} fadeIn>
-                Select a Plan
-              </Text>
-              <View style={styles.planList}>
-                {MY_PLANS.map((plan) => (
-                  <SurfaceCard
-                    key={plan}
-                    tone="neutral"
-                    padding="md"
-                    showAccentStripe={false}
-                    style={styles.planCard}
+        {showPlansList ? (
+          <>
+            <Text variant="display1" color="primary" style={styles.heroTitle} fadeIn>
+              Select a Workout
+            </Text>
+            <View style={styles.planList}>
+              {plans.length > 0 ? (
+                plans.map((plan: Plan) => (
+                  <Pressable
+                    key={plan.id}
+                    onPress={() => handlePlanSelect(plan)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Start ${plan.name}`}
                   >
-                    <View style={styles.planCardContent}>
-                      <Text variant="bodySemibold" color="primary">
-                        {plan}
-                      </Text>
-                      <Text variant="body" color="secondary">
-                        Tap to review this routine before you begin.
-                      </Text>
-                    </View>
-                  </SurfaceCard>
-                ))}
-              </View>
-            </>
-          ) : (
-            <>
-              <Text variant="display1" color="primary" style={styles.heroTitle} fadeIn>
-                How do you want to start?
-              </Text>
-              <View style={styles.optionsContainer}>
-                <View style={styles.buttonWrapper}>
-                  <Button label="Start from Plan" size="lg" onPress={handleStartFromPlan} />
-                </View>
-                <View style={styles.buttonWrapper}>
-                  <Button label="Start from Scratch" size="lg" variant="light" onPress={handleStartFromScratch} />
-                </View>
-              </View>
-            </>
-          )
+                    <SurfaceCard tone="neutral" padding="md" showAccentStripe={false} style={styles.planCard}>
+                      <View style={styles.planCardContent}>
+                        <Text variant="bodySemibold" color="primary">
+                          {plan.name}
+                        </Text>
+                        <Text variant="body" color="secondary">
+                          {plan.exercises.length === 1
+                            ? '1 exercise included'
+                            : `${plan.exercises.length} exercises included`}
+                        </Text>
+                      </View>
+                    </SurfaceCard>
+                  </Pressable>
+                ))
+              ) : (
+                <SurfaceCard tone="neutral" padding="md" showAccentStripe={false} style={styles.planCard}>
+                  <View style={styles.planCardContent}>
+                    <Text variant="bodySemibold" color="primary">
+                      No saved workouts yet
+                    </Text>
+                    <Text variant="body" color="secondary">
+                      Create a workout from the Plans tab to see it here.
+                    </Text>
+                  </View>
+                </SurfaceCard>
+              )}
+            </View>
+          </>
         ) : (
           <>
             <Text variant="display1" color="primary" style={styles.heroTitle} fadeIn>
-              Start your next session.
+              Start your next session
             </Text>
-            <View style={styles.buttonWrapper}>
-              <Button label="Begin Workout" size="lg" onPress={handleStartPress} />
+            <View style={styles.optionsContainer}>
+              <View style={styles.buttonWrapper}>
+                <Button label="Start from saved workout" size="lg" onPress={handleStartFromPlan} />
+              </View>
+              <View style={styles.buttonWrapper}>
+                <Button label="Start from Scratch" size="lg" variant="light" onPress={handleStartFromScratch} />
+              </View>
             </View>
           </>
         )}

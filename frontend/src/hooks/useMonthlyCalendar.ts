@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import {
+  formatDateToLocalISO,
+  getDeviceCurrentDate,
+  getTodayLocalISO,
+  parseLocalISODate,
+} from '@/utils/date';
+
 export interface UseMonthlyCalendarOptions {
   initialMonth?: string;
   selectedDate?: string;
@@ -18,20 +25,12 @@ export interface CalendarGridItem {
   hasMarker: boolean;
 }
 
-const DAYS_IN_GRID = 35;
+const DAYS_IN_GRID = 42;
 const DAY_MS = 86_400_000;
 
 const createDateFromISO = (iso?: string): Date => {
-  if (!iso) return new Date();
-  const [year, month, day] = iso.split('-').map(Number);
-  return new Date(year, month - 1, day);
-};
-
-const formatISO = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  if (!iso) return getDeviceCurrentDate();
+  return parseLocalISODate(iso);
 };
 
 const startOfMonth = (date: Date): Date => new Date(date.getFullYear(), date.getMonth(), 1);
@@ -60,7 +59,7 @@ const getWeekdayLabels = (formatter: Intl.DateTimeFormat): string[] => {
 export const useMonthlyCalendar = (options: UseMonthlyCalendarOptions = {}) => {
   const { initialMonth, selectedDate, markers = [], onSelectDate, locale = 'en-US' } = options;
 
-  const todayISO = useMemo(() => formatISO(new Date()), []);
+  const todayISO = useMemo(() => getTodayLocalISO(), []);
   const [visibleMonth, setVisibleMonth] = useState<Date>(() =>
     startOfMonth(createDateFromISO(initialMonth ?? todayISO))
   );
@@ -93,7 +92,7 @@ export const useMonthlyCalendar = (options: UseMonthlyCalendarOptions = {}) => {
   const gridItems = useMemo<CalendarGridItem[]>(
     () =>
       gridDates.map((date) => {
-        const isoDate = formatISO(date);
+        const isoDate = formatDateToLocalISO(date);
         return {
           isoDate,
           date,

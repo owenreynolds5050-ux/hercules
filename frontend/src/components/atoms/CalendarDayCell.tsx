@@ -5,7 +5,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleProp, StyleSheet, TouchableOpacity, View, ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
@@ -58,31 +58,74 @@ export const CalendarDayCell: React.FC<CalendarDayCellProps> = ({
     transform: [{ scale: scale.value }],
   }));
 
-  const dayContainerStyle = useMemo(() => {
-    const states = [
-      styles.dayContainer,
-      isSelected ? styles.selectedDayContainer : isToday ? styles.todayDayContainer : null,
-      !isCurrentMonth ? styles.outsideMonthDay : null,
-    ];
-    return states.filter(Boolean);
-  }, [isCurrentMonth, isSelected, isToday]);
+  const showMarkerFill = hasMarker && !isSelected;
+  const showSelectedTodayMarkerFill = hasMarker && isSelected && isToday;
 
-  const showMarker = isToday;
+  const dayContainerStyle = useMemo<StyleProp<ViewStyle>>(() => {
+    const states: ViewStyle[] = [styles.dayContainer];
 
-  const markerStyles = useMemo(() => {
-    const states = [styles.marker, showMarker ? styles.markerVisible : styles.markerHidden];
-    if (isSelected) {
-      states.push(styles.markerSelected);
+    if (isToday) {
+      states.push(styles.todayDayContainer);
     }
+
+    if (showMarkerFill) {
+      states.push(styles.markerDayContainer);
+    }
+
+    if (isSelected) {
+      states.push(styles.selectedDayContainer);
+    }
+
+    if (showSelectedTodayMarkerFill) {
+      states.push(styles.selectedTodayMarkerDayContainer);
+    }
+
+    if (!isCurrentMonth) {
+      states.push(styles.outsideMonthDay);
+    }
+
     return states;
-  }, [isSelected, showMarker]);
+  }, [isCurrentMonth, isSelected, isToday, showMarkerFill, showSelectedTodayMarkerFill]);
 
   const textColor = useMemo(() => {
-    if (!isCurrentMonth) return 'tertiary';
-    if (isSelected) return 'onAccent';
-    if (isToday) return 'orange';
+    if (!isCurrentMonth) {
+      return 'tertiary';
+    }
+
+    if (showMarkerFill || showSelectedTodayMarkerFill) {
+      return 'onAccent';
+    }
+
+    if (isSelected) {
+      return 'primary';
+    }
+
+    if (isToday) {
+      return 'primary';
+    }
+
     return 'primary';
-  }, [isCurrentMonth, isSelected, isToday]);
+  }, [isCurrentMonth, isSelected, isToday, showMarkerFill, showSelectedTodayMarkerFill]);
+
+  const todayLabelStyle = useMemo(() => {
+    if (isToday && !showMarkerFill && !showSelectedTodayMarkerFill) {
+      return styles.todayLabelText;
+    }
+
+    return undefined;
+  }, [isToday, showMarkerFill, showSelectedTodayMarkerFill]);
+
+  const dayContent = (
+    <View style={dayContainerStyle}>
+      <Text
+        variant="bodySemibold"
+        color={textColor}
+        style={todayLabelStyle}
+      >
+        {dayLabel}
+      </Text>
+    </View>
+  );
 
   return (
     <Animated.View style={[styles.wrapper, animatedStyle]}>
@@ -100,12 +143,7 @@ export const CalendarDayCell: React.FC<CalendarDayCellProps> = ({
         delayLongPress={150}
         style={styles.touchable}
       >
-        <View style={dayContainerStyle}>
-          <Text variant="bodySemibold" color={textColor}>
-            {dayLabel}
-          </Text>
-          <View style={markerStyles} />
-        </View>
+        {dayContent}
       </TouchableOpacity>
     </Animated.View>
   );
@@ -118,43 +156,39 @@ const styles = StyleSheet.create({
   },
   touchable: {
     width: '100%',
-    alignItems: 'center',
+    aspectRatio: 1,
+    alignItems: 'stretch',
   },
   dayContainer: {
-    width: '100%',
-    aspectRatio: 1,
+    flex: 1,
+    alignSelf: 'stretch',
     borderRadius: radius.md,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 0,
     backgroundColor: colors.surface.card,
-    borderWidth: 1,
-    borderColor: colors.primary.dark,
+    borderWidth: 2,
+    borderColor: colors.border.light,
+    overflow: 'hidden',
   },
   todayDayContainer: {
     borderColor: colors.accent.orange,
   },
+  markerDayContainer: {
+    backgroundColor: colors.accent.orange,
+    borderColor: colors.accent.orange,
+  },
   selectedDayContainer: {
-    backgroundColor: colors.accent.primary,
-    borderColor: colors.accent.primary,
+    backgroundColor: colors.surface.subtle,
   },
   outsideMonthDay: {
     opacity: opacity.tertiary,
   },
-  marker: {
-    width: spacing.xs,
-    height: spacing.xs,
-    borderRadius: radius.full,
-    alignSelf: 'center',
-    marginTop: -spacing.xs,
+  todayLabelText: {
+    color: colors.overlay.navigation,
   },
-  markerHidden: {
-    opacity: 0,
-  },
-  markerVisible: {
+  selectedTodayMarkerDayContainer: {
     backgroundColor: colors.accent.orange,
-  },
-  markerSelected: {
-    backgroundColor: colors.text.onAccent,
+    borderColor: colors.accent.orange,
   },
 });

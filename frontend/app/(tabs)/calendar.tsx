@@ -1,29 +1,51 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Pressable } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { SurfaceCard } from '@/components/atoms/SurfaceCard';
 import { Text } from '@/components/atoms/Text';
 import { MonthlyCalendar } from '@/components/molecules/MonthlyCalendar';
 import { ScreenHeader } from '@/components/molecules/ScreenHeader';
 import { TabSwipeContainer } from '@/components/templates/TabSwipeContainer';
-import { colors, spacing } from '@/constants/theme';
+import { colors, radius, spacing } from '@/constants/theme';
+import { formatDateToLocalISO, getDeviceCurrentDate, parseLocalISODate } from '@/utils/date';
+import { formatWorkoutTitle, getWorkoutSummary } from '@/utils/workout';
+import { useWorkoutSessionsStore, type WorkoutSessionsState } from '@/store/workoutSessionsStore';
+import { usePlansStore, type PlansState } from '@/store/plansStore';
 
-const toISODate = (date: Date): string => date.toISOString().split('T')[0];
+const getWorkoutLocalISO = (workout: WorkoutSessionsState['workouts'][number]): string | null => {
+  if (workout.startTime) {
+    return formatDateToLocalISO(new Date(workout.startTime));
+  }
+
+  if (workout.date) {
+    return formatDateToLocalISO(new Date(workout.date));
+  }
+
+  return null;
+};
 
 const CalendarScreen: React.FC = () => {
-  const [selectedDate, setSelectedDate] = useState<string>(() => toISODate(new Date()));
-  const [resetKey, setResetKey] = useState<number>(0);
+  const router = useRouter();
+  const [selectedDate, setSelectedDate] = useState<string>(() => formatDateToLocalISO(getDeviceCurrentDate()));
 
-  const markers = useMemo(() => {
-    const base = new Date();
-    const offsets = [-6, -3, -1, 2, 5, 9, 14];
-    return offsets.map((offset) => {
-      const next = new Date(base);
-      next.setDate(base.getDate() + offset);
-      return toISODate(next);
+  const workouts = useWorkoutSessionsStore((state: WorkoutSessionsState) => state.workouts);
+  const hydrateWorkouts = useWorkoutSessionsStore((state: WorkoutSessionsState) => state.hydrateWorkouts);
+  const plans = usePlansStore((state: PlansState) => state.plans);
+
+  const markers = useMemo<string[]>(() => {
+    const unique = new Set<string>();
+    workouts.forEach((workout) => {
+      const workoutISO = getWorkoutLocalISO(workout);
+      if (workoutISO) {
+        unique.add(workoutISO);
+      }
     });
-  }, []);
+    return Array.from(unique).sort();
+  }, [workouts]);
 
   const markersSet = useMemo(() => new Set(markers), [markers]);
 
@@ -33,11 +55,46 @@ const CalendarScreen: React.FC = () => {
   );
 
   const friendlyDateLabel = useMemo(() => {
-    const date = new Date(`${selectedDate}T00:00:00`);
+    const date = parseLocalISODate(selectedDate);
     return friendlyFormatter.format(date);
   }, [friendlyFormatter, selectedDate]);
 
-  const hasWorkout = useMemo(() => markersSet.has(selectedDate), [markersSet, selectedDate]);
+  const planNameLookup = useMemo(() => {
+    const lookup = new Map<string, string>();
+    plans.forEach((plan) => {
+      lookup.set(plan.id, plan.name);
+    });
+    return lookup;
+  }, [plans]);
+
+  const selectedWorkouts = useMemo(() => {
+    return workouts
+      .filter((workout) => getWorkoutLocalISO(workout) === selectedDate)
+      .slice()
+      .sort((a, b) => {
+        const getTimestamp = (workout: WorkoutSessionsState['workouts'][number]): number => {
+          return workout.endTime ?? workout.startTime ?? new Date(workout.date).getTime();
+        };
+
+        return getTimestamp(b) - getTimestamp(a);
+      });
+  }, [selectedDate, workouts]);
+
+  const selectedWorkoutSummaries = useMemo(
+    () =>
+      selectedWorkouts.map((workout) => {
+        const planName = workout.planId ? planNameLookup.get(workout.planId) ?? null : null;
+
+        return {
+          workout,
+          title: formatWorkoutTitle(workout, planName),
+          summary: getWorkoutSummary(workout),
+        };
+      }),
+    [planNameLookup, selectedWorkouts],
+  );
+
+  const hasWorkouts = selectedWorkoutSummaries.length > 0;
 
   const handleSelectDate = useCallback((isoDate: string) => {
     setSelectedDate(isoDate);
@@ -49,21 +106,28 @@ const CalendarScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
-      setSelectedDate(toISODate(new Date()));
-      setResetKey((prev) => prev + 1);
+      setSelectedDate(formatDateToLocalISO(getDeviceCurrentDate()));
+      void hydrateWorkouts();
     }, [])
+  );
+
+  const handleViewWorkout = useCallback(
+    (workoutId: string) => {
+      void Haptics.selectionAsync();
+      router.push({ pathname: '/(tabs)/workout-detail', params: { workoutId } });
+    },
+    [router],
   );
 
   return (
     <TabSwipeContainer contentContainerStyle={styles.contentContainer}>
       <ScreenHeader
-        title="Calendar"
-        subtitle="Track your training days and keep momentum going."
+        title="Training Calendar"
+        subtitle="Track workouts and build consistency."
       />
 
       <View style={styles.calendarSection}>
         <MonthlyCalendar
-          key={resetKey}
           selectedDate={selectedDate}
           onSelectDate={handleSelectDate}
           markers={markers}
@@ -71,16 +135,42 @@ const CalendarScreen: React.FC = () => {
         />
       </View>
 
-      <SurfaceCard tone={hasWorkout ? 'subtle' : 'card'} padding="xl">
-        <View style={styles.summaryContent}>
-          <Text variant="heading3" color="primary">
-            {friendlyDateLabel}
-          </Text>
-          <Text variant="body" color={hasWorkout ? 'orange' : 'secondary'}>
-            {hasWorkout ? 'Workout logged — review your session details.' : 'No sessions logged yet. Tap a day to schedule your next workout.'}
-          </Text>
-        </View>
-      </SurfaceCard>
+      <View style={styles.summarySection}>
+        <Text variant="heading3" color="primary">
+          {friendlyDateLabel}
+        </Text>
+
+        {hasWorkouts ? (
+          <View style={styles.workoutList}>
+            {selectedWorkoutSummaries.map(({ workout, title, summary }) => (
+              <Pressable
+                key={workout.id}
+                style={styles.summaryPressable}
+                accessibilityRole="button"
+                accessibilityLabel="View workout details"
+                onPress={() => handleViewWorkout(workout.id)}
+              >
+                <SurfaceCard tone="card" padding="lg" showAccentStripe={true} style={styles.workoutCard}>
+                  <View style={styles.workoutHeader}>
+                    <Text variant="bodySemibold" color="primary">
+                      {title}
+                    </Text>
+                    <Text variant="caption" color="secondary">
+                      {summary}
+                    </Text>
+                  </View>
+                </SurfaceCard>
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          <SurfaceCard tone="card" padding="xl" showAccentStripe={false} style={styles.noWorkoutCard}>
+            <Text variant="body" color="secondary">
+              No session logged.
+            </Text>
+          </SurfaceCard>
+        )}
+      </View>
     </TabSwipeContainer>
   );
 };
@@ -91,15 +181,33 @@ const styles = StyleSheet.create({
   contentContainer: {
     flexGrow: 1,
     backgroundColor: colors.primary.bg,
-    paddingTop: spacing['2xl'],
+    paddingTop: spacing.xl,
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,
-    gap: spacing['2xl'],
+    gap: spacing.xl,
   },
   calendarSection: {
     width: '100%',
   },
-  summaryContent: {
+  summarySection: {
+    width: '100%',
+    gap: spacing.md,
+  },
+  summaryPressable: {
+    width: '100%',
+  },
+  workoutList: {
+    width: '100%',
+    gap: spacing.md,
+  },
+  workoutCard: {
+    gap: spacing.sm,
+    position: 'relative',
+  },
+  workoutHeader: {
+    gap: spacing.xs,
+  },
+  noWorkoutCard: {
     gap: spacing.xs,
   },
 });
